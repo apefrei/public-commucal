@@ -1,9 +1,11 @@
-# Commucal – Product Requirements
+# CommuCal – Product Requirements
 
-- **Product:** Commucal (working title) – public community calendars for municipalities and associations
+- **Product:** CommuCal – public community calendars for municipalities and associations
+- **Domain:** commucal.ch
+- **Licence:** MIT
 - **Owner:** Lauro Frei (@apefrei)
 - **Status:** Draft for review
-- **Version:** 2.0 (2026-11-19)
+- **Version:** 2.1 (2026-11-19)
 - **Supersedes:** PRD v1.1 (2026-04-05) and the Task Master plan in `apefrei/testing-community-public-calendar`
 
 This file is the single source of truth for scope and milestones. Architecture decisions live in
@@ -15,7 +17,7 @@ This file is the single source of truth for scope and milestones. Architecture d
 Municipalities and associations struggle to get their dates – waste collection, paper collection, municipal
 assemblies, club events – into people's digital daily life. Printed flyers get lost, PDFs on websites are awkward.
 
-Commucal lets organisations publish standard calendar feeds (iCal / webcal) that people subscribe to once, via
+CommuCal lets organisations publish standard calendar feeds (iCal / webcal) that people subscribe to once, via
 link or QR code, and that update automatically in Apple, Google or Outlook calendars. An MCP server makes the same
 public data available to AI assistants.
 
@@ -24,7 +26,8 @@ public data available to AI assistants.
 | Residents / members | Public pages, subscriptions, event proposals, AI assistants via MCP |
 | Contributors (per tenant) | Maintain calendars and events, imports, review proposals |
 | Tenant admins (per tenant) | Everything contributors do, plus users, branding, audit log |
-| Global admins (operator) | Create tenants, invite their first admin, operate the platform |
+| Global admins (operator) | Create tenants, invite their first admin, operate the platform, billing |
+| Billing contacts (per tenant) | Receive annual invoices and reminders by email |
 
 ## 2. Goals and non-goals
 
@@ -37,12 +40,14 @@ public data available to AI assistants.
 - G5: Swiss multilingualism (DE, FR, IT) for UI and event content.
 - G6: Compliance with the Swiss revDSG (and GDPR where applicable); traceability of critical actions.
 - G7: Runs as a self-contained container stack on a single host.
+- G8: Simple, traditional billing: one annual price per tenant, invoices with Swiss QR bill sent automatically by email.
 
 ### Non-goals (for now)
 
 - Writing via MCP (creating or changing events through AI agents). Possible later with OAuth, see ADR-0005.
 - Native mobile apps. The product relies on the calendar apps people already use.
-- Ticketing, registrations, payments.
+- Ticketing and registrations for events.
+- Online payment (cards, TWINT, payment providers). Tenants pay invoices by bank transfer (QR bill).
 - Two-way sync with external calendars (e.g. importing from Google Calendar continuously).
 - Romansh and English UI. The i18n design must allow adding them later without schema changes.
 
@@ -57,6 +62,8 @@ public data available to AI assistants.
 | Create / edit / delete calendars | ✔ | ✔ | ✔ | |
 | Create / edit / delete / import events, bulk edit | ✔ | ✔ | ✔ | |
 | Review event proposals | ✔ | ✔ | ✔ | |
+| Manage plans and prices, mark invoices as paid | ✔ | | | |
+| Maintain billing address and billing email, download own invoices | ✔ | ✔ (own tenant) | | |
 | View public calendars, subscribe, propose events, use MCP | | | | ✔ |
 
 A user can be a member of several tenants with a role per tenant (ADR-0003).
@@ -80,6 +87,12 @@ A user can be a member of several tenants with a role per tenant (ADR-0003).
 - US-10: As a tenant admin I see an audit log, so I know who deleted or approved what and when.
 - US-11: As a global admin I create tenants and invite their first admin, so the platform can onboard customers.
 - US-12: As a tenant admin I offer our own MCP address, so residents can connect "our" calendar to their AI assistant.
+
+### Operator and billing
+
+- US-13: As the operator I set an annual price per tenant once, and invoices are created and emailed automatically every year.
+- US-14: As a municipality's billing contact I receive a PDF invoice with a Swiss QR bill that our accounting can pay as usual.
+- US-15: As the operator I see which invoices are open or overdue, mark payments, and reminders go out automatically.
 
 ## 5. Functional requirements
 
@@ -194,6 +207,31 @@ Details and rationale in ADR-0005.
 - FR-50: Tenant admins see their MCP address with setup instructions for common AI clients on the backend dashboard
   and may show it on their public page.
 
+### 5.10 Billing [M4]
+
+Details and rationale in ADR-0008.
+
+- FR-51: Billing profile per tenant: organisation name, billing address, one or more billing emails, optional customer
+  reference (e.g. cost centre), optional VAT number. Maintained by tenant admins and global admins.
+- FR-52: Global admins define plans with an annual price in CHF and assign a plan to each tenant; an individual price
+  per tenant overrides the plan. Prices and plans are configuration, not code.
+- FR-53: The billing year starts at the tenant's activation date. The worker creates the invoice automatically at the
+  start of each billing year (first invoice at activation). Payment term 30 days (configurable).
+- FR-54: Invoices are PDFs with a Swiss QR bill (IBAN with SCOR creditor reference, or QR-IBAN with QR reference) generated with
+  `swissqrbill`. Invoice numbers are sequential and gapless per year.
+- FR-55: The worker emails the invoice PDF to the tenant's billing emails via Resend (ADR-0006). Delivery status is
+  recorded; failed deliveries alert the operator.
+- FR-56: Issued invoices are immutable (stored PDF plus data snapshot). Corrections are made with a credit note and a
+  new invoice. Invoices are retained for 10 years (Swiss Code of Obligations, art. 958f), also after a tenant is deleted.
+- FR-57: Global admins see open, paid and overdue invoices and mark invoices as paid (date, amount). Importing bank
+  statements (camt.054) for automatic matching is a possible later extension.
+- FR-58: Automatic payment reminders by email at 10 and 30 days after the due date (configurable); after that, follow-up
+  is manual. Tenant access is not blocked automatically.
+- FR-59: Tenant admins see and download their tenant's invoices in the backend.
+- FR-60: VAT is configurable (rate and VAT number of the operator) and disabled by default until the operator is
+  registered for Swiss VAT.
+- FR-61: All billing actions (plan change, invoice issued, sent, paid, credit note, reminder) are written to the audit log.
+
 ## 6. Non-functional requirements
 
 ### Security
@@ -226,9 +264,10 @@ Details and rationale in ADR-0005.
 
 - NFR-13: Hosting at Hetzner (EU, Germany or Finland). EU/EEA countries are recognised by Switzerland as providing
   adequate data protection.
-- NFR-14: Processors: Hetzner (hosting), WEDOS (WAF), Resend (transactional email, USA). Data passed to Resend is
-  limited to backend users' email addresses and names (invitations, password reset, MFA notices) and contains no
-  resident data (FR-34, FR-35). All processors are listed in the privacy policy (ADR-0006).
+- NFR-14: Processors: Hetzner (hosting), WEDOS (WAF), Resend (transactional email; US company, sending region
+  Ireland `eu-west-1`). Data passed to Resend is limited to backend users' and billing contacts' email addresses and
+  names (invitations, password reset, MFA notices, invoices) and contains no resident data (FR-34, FR-35). All
+  processors are listed in the privacy policy (ADR-0006).
 - NFR-15: Data minimisation: no tracking, no third-party scripts or fonts on public pages, no IP addresses stored in the
   database. Subscription metrics (section 8) are counted without storing personal data.
 - NFR-16 [M3]: Privacy policy and legal notice pages for the platform; tenants can add their own contact and legal notice.
@@ -263,7 +302,7 @@ Details in ADR-0002. Summary:
 |---|---|---|
 | `web` | Node 26 LTS | Public pages, backend UI, API, feeds |
 | `mcp` | Node 26 LTS | MCP server (read-only) |
-| `worker` | Node 26 LTS | Background jobs: anonymisation, purge, emails, audit verification, backups trigger |
+| `worker` | Node 26 LTS | Background jobs: anonymisation, purge, emails, invoices, reminders, audit verification |
 | `migrate` | Node 26 LTS | One-shot migrations before app start |
 | `postgres` | PostgreSQL 18 | All persistent data |
 | `valkey` | Valkey 9 | Feed cache, rate-limit counters |
@@ -285,7 +324,8 @@ Details in ADR-0002. Summary:
 | i18n | next-intl |
 | QR codes | qrcode |
 | Import | papaparse (CSV), read-excel-file (XLSX; replaces the unmaintained npm `xlsx`) |
-| Email | Resend (ADR-0006) |
+| Email | Resend, region eu-west-1 (ADR-0006) |
+| Invoices | swissqrbill with pdfkit (ADR-0008) |
 | Bot protection | ALTCHA (ADR-0007) |
 | MCP | Official MCP TypeScript SDK (ADR-0005) |
 | Tests | vitest, Playwright, axe-core, MCP Inspector |
@@ -310,6 +350,7 @@ deploy/         Compose files, Caddy config (local), nginx snippet for productio
 - M-3: Time from tenant creation to first public calendar (time-to-value).
 - M-4: Imports completed without rollback or follow-up corrections.
 - M-5: MCP tool calls per tenant per month.
+- M-6: Share of invoices paid within the payment term.
 
 ## 9. Milestones
 
@@ -376,6 +417,25 @@ Exit criteria:
 2. A restore from backup to a fresh host has been performed and documented.
 3. Privacy policy lists all processors; accessibility audit has no open AA findings.
 
+### M4 – Billing
+
+Pilot tenants can use M1–M3 free of charge; billing must be in place before the first paying tenant.
+
+| WP | Content | Requirements |
+|---|---|---|
+| WP-4.1 | Billing profiles, plans, prices per tenant | FR-51, 52 |
+| WP-4.2 | Invoice generation: numbering, PDF with QR bill, immutable storage, credit notes | FR-53, 54, 56, 60 |
+| WP-4.3 | Invoice and reminder emails via Resend, delivery tracking | FR-55, 58 |
+| WP-4.4 | Billing overview for global admins (open, paid, overdue), mark as paid; invoice list for tenant admins | FR-57, 59 |
+| WP-4.5 | Audit entries and tests for the whole billing cycle | FR-61 |
+
+Exit criteria:
+
+1. Activating a tenant creates and emails its first invoice automatically.
+2. The QR bill is accepted by a Swiss e-banking app (scan test) and by a QR bill validator.
+3. Overdue invoices trigger reminders; marking an invoice as paid stops them.
+4. A credit note corrects an invoice without changing the original.
+
 ## 10. Edge cases
 
 - Daylight saving changes: recurring events keep their local wall-clock time across DST (stored with tenant time zone,
@@ -397,10 +457,12 @@ Exit criteria:
 | Large municipalities cause feed load peaks | Valkey cache, ETag, WAF caching for `.ics` with short TTL |
 | Better Auth or Next.js breaking changes | Pinned versions, Dependabot, upgrade PRs with full test suite |
 | Personal data leaks across tenants | Double enforcement (app + RLS), cross-tenant tests in CI |
+| Faulty invoices (wrong amount, broken QR bill) | Immutable invoices with credit notes, validator and e-banking scan test in M4 exit criteria |
 
 ## 12. Open questions
 
-- Q1: Final product name and domain (currently "Commucal").
-- Q2: Licence for the product (the repository currently carries MIT from the playbook template).
-- Q3: Resend sending region (EU region if available for the account) – to be checked in WP-1.4.
-- Q4: Pricing / hosting model for tenants (not needed before M3).
+- Q4: Annual prices per plan and whether associations pay differently from municipalities (needed for M4).
+- Q5: Operator details for invoices: legal entity, address, IBAN or QR-IBAN, VAT status (needed for M4).
+
+Resolved: Q1 name and domain → CommuCal, commucal.ch. Q2 licence → MIT (open source, permissive).
+Q3 Resend region → Ireland (`eu-west-1`).
