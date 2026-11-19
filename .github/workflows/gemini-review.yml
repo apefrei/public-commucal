@@ -4,11 +4,11 @@ name: Gemini review
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    # Drafts are reviewed too, so ready_for_review would only repeat the review of the same commit.
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: read
-  pull-requests: write
 
 concurrency:
   group: gemini-review-${{ github.event.pull_request.number }}
@@ -34,6 +34,9 @@ jobs:
       github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v7
         with:

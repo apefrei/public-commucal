@@ -2,17 +2,17 @@
 
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, it, mock } from "node:test";
 import {
-  BlockedError,
   EXCLUDED_PATHS,
   errorMessage,
   extractText,
   type GeminiResponse,
   generateReview,
+  NoAnswerError,
   oneLine,
   ServiceUnavailableError,
   withNotice,
@@ -81,18 +81,30 @@ describe("extractText", () => {
     assert.match(text, /cut off at the output limit/);
   });
 
-  it("raises BlockedError for a blocked prompt", () => {
-    assert.throws(() => extractText({ promptFeedback: { blockReason: "SAFETY" } }), BlockedError);
+  it("raises NoAnswerError for a blocked prompt", () => {
+    assert.throws(() => extractText({ promptFeedback: { blockReason: "SAFETY" } }), NoAnswerError);
   });
 
-  it("raises BlockedError for a safety stop", () => {
-    assert.throws(() => extractText({ candidates: [{ finishReason: "SAFETY" }] }), BlockedError);
+  it("raises NoAnswerError for a safety stop", () => {
+    assert.throws(() => extractText({ candidates: [{ finishReason: "SAFETY" }] }), NoAnswerError);
+  });
+
+  it("raises NoAnswerError when the output limit was used up without text", () => {
+    assert.throws(
+      () =>
+        extractText({
+          candidates: [
+            { content: { parts: [{ text: "…", thought: true }] }, finishReason: "MAX_TOKENS" },
+          ],
+        }),
+      NoAnswerError,
+    );
   });
 
   it("raises a plain error for an empty answer", () => {
     assert.throws(
       () => extractText({ candidates: [{ content: { parts: [] }, finishReason: "STOP" }] }),
-      (error: unknown) => error instanceof Error && !(error instanceof BlockedError),
+      (error: unknown) => error instanceof Error && !(error instanceof NoAnswerError),
     );
   });
 });
@@ -133,6 +145,25 @@ describe("generateReview", () => {
     await generateReview(opts);
     assert.equal(calls, 2);
     assert.deepEqual(sleeps, [20_000]);
+  });
+
+  it("retries when reading the response body fails", async () => {
+    let calls = 0;
+    mock.method(globalThis, "fetch", async () => {
+      calls++;
+      if (calls === 1) {
+        const broken = new ReadableStream({
+          start(controller) {
+            controller.error(new TypeError("terminated"));
+          },
+        });
+        return new Response(broken, { status: 200 });
+      }
+      return json(200, OK_BODY);
+    });
+    const { opts } = options();
+    assert.deepEqual(await generateReview(opts), OK_BODY);
+    assert.equal(calls, 2);
   });
 
   it("gives up with ServiceUnavailableError after the maximum attempts", async () => {
@@ -188,28 +219,32 @@ describe("generateReview", () => {
 describe("EXCLUDED_PATHS", () => {
   it("excludes lock files, snapshots and SVGs in the root and in subdirectories", () => {
     const dir = mkdtempSync(join(tmpdir(), "gemini-review-"));
-    const files = [
-      "pnpm-lock.yaml",
-      "package-lock.json",
-      "logo.svg",
-      "apps/web/package-lock.json",
-      "apps/web/__snapshots__/a.snap",
-      "apps/web/src/page.tsx",
-      "README.md",
-    ];
-    for (const file of files) {
-      mkdirSync(join(dir, file, ".."), { recursive: true });
-      writeFileSync(join(dir, file), "x\n");
+    try {
+      const files = [
+        "pnpm-lock.yaml",
+        "package-lock.json",
+        "logo.svg",
+        "apps/web/package-lock.json",
+        "apps/web/__snapshots__/a.snap",
+        "apps/web/src/page.tsx",
+        "README.md",
+      ];
+      for (const file of files) {
+        mkdirSync(join(dir, file, ".."), { recursive: true });
+        writeFileSync(join(dir, file), "x\n");
+      }
+      execFileSync("git", ["init", "-q"], { cwd: dir });
+      execFileSync("git", ["add", "-A"], { cwd: dir });
+      const listed = execFileSync("git", ["ls-files", "--", ".", ...EXCLUDED_PATHS], {
+        cwd: dir,
+        encoding: "utf8",
+      })
+        .trim()
+        .split("\n");
+      assert.deepEqual(listed.sort(), ["README.md", "apps/web/src/page.tsx"]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
-    execFileSync("git", ["init", "-q"], { cwd: dir });
-    execFileSync("git", ["add", "-A"], { cwd: dir });
-    const listed = execFileSync("git", ["ls-files", "--", ".", ...EXCLUDED_PATHS], {
-      cwd: dir,
-      encoding: "utf8",
-    })
-      .trim()
-      .split("\n");
-    assert.deepEqual(listed.sort(), ["README.md", "apps/web/src/page.tsx"]);
   });
 });
 

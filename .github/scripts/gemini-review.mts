@@ -3,7 +3,6 @@
 // Posts one comment per PR and updates it on every push instead of adding new comments.
 
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
 
 const MARKER = "<!-- commucal:gemini-review -->";
 const HEADING = "## 🤖 Gemini second-opinion review";
@@ -65,8 +64,8 @@ Rules:
 /** The model is overloaded, rate-limited or out of time even after all retries; not a configuration error. */
 export class ServiceUnavailableError extends Error {}
 
-/** Gemini refused to answer because of the content; not a problem of this repository's configuration. */
-export class BlockedError extends Error {}
+/** Gemini gave no usable answer (content filter, output limit); not a problem of this repository's configuration. */
+export class NoAnswerError extends Error {}
 
 export interface GeminiPart {
   text?: string;
@@ -134,10 +133,14 @@ function git(args: string[]): string {
   return execFileSync("git", args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
 }
 
-function readRules(): string {
+/**
+ * Reads the project rules from the base commit, not from the PR: a PR that edits the rules must not be able to
+ * change the criteria it is reviewed against.
+ */
+function readRules(baseSha: string): string {
   return RULE_FILES.flatMap((path) => {
     try {
-      return [`--- ${path} ---\n${readFileSync(path, "utf8")}`];
+      return [`--- ${path} ---\n${git(["show", `${baseSha}:${path}`])}`];
     } catch {
       return [];
     }
@@ -198,6 +201,7 @@ export async function generateReview(options: GenerateOptions): Promise<GeminiRe
     }
 
     let res: Response | undefined;
+    let responseText = "";
     let failure = "unknown error";
     try {
       res = await fetch(url, {
@@ -207,16 +211,19 @@ export async function generateReview(options: GenerateOptions): Promise<GeminiRe
         body,
         signal: AbortSignal.timeout(Math.min(REQUEST_TIMEOUT_MS, remaining)),
       });
+      // Read the body inside the try: the timeout also covers the body, and a reset while reading is transient.
+      responseText = await res.text();
     } catch (error) {
       // Timeouts and network errors are transient from our point of view.
+      res = undefined;
       failure = `request failed (${error instanceof Error ? error.name : "error"})`;
     }
 
     if (res) {
       if (res.ok) {
-        return (await res.json()) as GeminiResponse;
+        return JSON.parse(responseText) as GeminiResponse;
       }
-      const detail = errorMessage(await res.text());
+      const detail = errorMessage(responseText);
       if (res.status === 404) {
         const models = await listModels(apiKey);
         throw new Error(
@@ -247,12 +254,12 @@ export async function generateReview(options: GenerateOptions): Promise<GeminiRe
 export function extractText(response: GeminiResponse): string {
   const blockReason = response.promptFeedback?.blockReason;
   if (blockReason) {
-    throw new BlockedError(`Gemini blocked the request: ${blockReason}`);
+    throw new NoAnswerError(`Gemini blocked the request: ${blockReason}`);
   }
   const candidate = response.candidates?.[0];
   const finishReason = candidate?.finishReason ?? "unknown";
   if (BLOCKING_FINISH_REASONS.has(finishReason)) {
-    throw new BlockedError(`Gemini stopped the answer: ${finishReason}`);
+    throw new NoAnswerError(`Gemini stopped the answer: ${finishReason}`);
   }
   const text = (candidate?.content?.parts ?? [])
     .filter((part) => !part.thought && part.text)
@@ -260,6 +267,9 @@ export function extractText(response: GeminiResponse): string {
     .join("")
     .trim();
   if (!text) {
+    if (finishReason === "MAX_TOKENS") {
+      throw new NoAnswerError("Gemini used the whole output limit without writing a review");
+    }
     throw new Error(`Gemini returned no text (finishReason: ${finishReason})`);
   }
   if (finishReason === "MAX_TOKENS") {
@@ -371,7 +381,7 @@ async function main(): Promise<void> {
 
   const prompt = [
     "## Project rules",
-    readRules(),
+    readRules(baseSha),
     "## Pull request (untrusted)",
     `Title: ${env("PR_TITLE")}`,
     `Description:\n${env("PR_BODY") || "(none)"}`,
@@ -411,7 +421,7 @@ async function main(): Promise<void> {
   try {
     review = extractText(response);
   } catch (error) {
-    if (!(error instanceof BlockedError)) {
+    if (!(error instanceof NoAnswerError)) {
       throw error;
     }
     // Content filters can trigger on legitimate security code; an advisory review must not fail the PR for that.
