@@ -1,134 +1,85 @@
-# Claude Playbook
+# CommuCal
 
-Meine persönliche Grundlage für Coding-Projekte mit Claude Code.
+Public community calendars for Swiss municipalities and associations – subscribe once, stay up to date.
 
-Das Playbook ist Template für neue Projekte und Referenz für bestehende. Es definiert, wie Claude Code in meinen Projekten arbeitet: Regeln, Agents, Slash-Commands, Permissions und Workflow-Konventionen.
+Municipalities and associations publish their dates (waste collection, assemblies, club events) as calendar feeds.
+Residents subscribe via QR code or link in Apple, Google or Outlook calendars, and AI assistants can query the same
+public data through an MCP server.
 
-## Warum mit dem Playbook arbeiten
+**Status:** early development (milestone M1). Website: [commucal.ch](https://commucal.ch) (not live yet).
 
-**Konsistenz über Projekte hinweg**
-Jedes Projekt startet mit denselben Konventionen. Claude verhält sich überall gleich, egal wie lange ein Projekt liegen geblieben ist.
+## Features (planned)
 
-**Weniger Erklären, weniger Fehler**
-Sicherheitsregeln, Tech-Stack-Konventionen und Eskalationsregeln sind dokumentiert. Claude muss nicht raten, ich muss nicht jedes Mal erklären.
+- Multi-tenant: each municipality or association has its own isolated area, users and branding
+- iCal/webcal feeds per calendar and language (DE, FR, IT), QR codes, subscription help
+- Import from CSV/Excel with column mapping and preview
+- Event proposals from residents with review workflow and automatic anonymisation
+- Mandatory MFA for all backend users, append-only audit log
+- Public, read-only MCP server (`/mcp`, `/t/{tenant}/mcp`) for AI assistants
+- Annual invoicing with Swiss QR bill
 
-**Sichere Defaults**
-Keine irreversiblen Aktionen ohne Bestätigung, keine Secrets im Code, klare Warnungen bei sensiblen Bereichen (Auth, Migrationen, Personendaten).
+Scope, milestones and acceptance criteria: [docs/requirements.md](docs/requirements.md).
 
-**Parallele Arbeit ohne Chaos**
-Konventionen für Worktrees, Sessions, Plan-Mode und Auto-Accept. Mehrere Claude-Sessions gleichzeitig produktiv führen.
+## Architecture
 
-**Lerneffekt über Projekte hinweg**
-`lessons.md` sammelt Korrekturen aus realen Sessions. Was in einem Projekt schiefging, fliesst ins Playbook zurück und gilt danach überall.
+```
+Internet → WEDOS WAF → host nginx (TLS) ─┬─► web   (Next.js)  ─┐
+                                         └─► mcp   (MCP)      ─┼─► postgres (RLS, audit, jobs)
+                         worker (jobs) ────────────────────────┴─► valkey   (cache, rate limits)
+```
 
-**Moderne Engineering-Praxis eingebaut**
-Agentic Code Review mit Policy-as-Code, ADRs für Architekturentscheidungen, Continuous Testing inklusive KI-Evals, DevSecOps mit Secret-Scanning und SBOM, Progressive Delivery mit Feature-Flags, Guardrails für Agent-Workflows.
+TypeScript everywhere on Node 26, Next.js 16, PostgreSQL 18, Valkey 9, Drizzle ORM, Better Auth, pnpm + Turborepo,
+Biome. Decisions and their reasons are recorded as [architecture decision records](docs/adr/README.md):
 
-## Was drin ist
+| ADR | Topic |
+|---|---|
+| [0002](docs/adr/0002-container-stack-and-deployment-topology.md) | Container stack and deployment topology |
+| [0003](docs/adr/0003-authentication-better-auth-mandatory-mfa.md) | Authentication with Better Auth and mandatory MFA |
+| [0004](docs/adr/0004-data-layer-drizzle-rls-append-only-audit.md) | Data layer: Drizzle, row-level security, append-only audit log |
+| [0005](docs/adr/0005-mcp-server.md) | Public read-only MCP server |
+| [0006](docs/adr/0006-transactional-email-with-resend.md) | Transactional email with Resend |
+| [0007](docs/adr/0007-bot-protection-altcha-and-rate-limiting.md) | Bot protection (ALTCHA) and rate limiting |
+| [0008](docs/adr/0008-invoicing-with-swiss-qr-bill.md) | Annual invoicing with Swiss QR bill |
+| [0009](docs/adr/0009-toolchain-and-language-versions.md) | Toolchain and language versions |
+| [0010](docs/adr/0010-gemini-second-opinion-pr-review.md) | Gemini as second-opinion PR reviewer |
 
-- Tech-Stack-Regeln für alle gängigen JS/TS-Frameworks (Next.js, Vite + React, Vue/Nuxt, Svelte/SvelteKit, Astro, Angular), Node-APIs, PostgreSQL, Docker und PHP für Altprojekte
-- Agents für Review, Verifikation und Specs
-- Slash-Commands für Build, Review und Commit-Workflows
+## Repository layout
 
-## Schnellstart
+```
+apps/web          Next.js: public pages, backend, API, feeds
+apps/mcp          MCP server
+apps/worker       Background jobs
+packages/core     Domain logic shared by all apps (time zones, recurrence, iCal)
+packages/db       Database schema, migrations, roles, row-level security
+packages/config   Shared TypeScript configuration
+deploy/           Caddy configuration for staging; production nginx snippet and runbooks follow
+docs/             Requirements, ADRs, development guide
+```
 
-### Voraussetzungen
+## Getting started
 
-- [Claude Code installieren](https://code.claude.com/docs): `npm install -g @anthropic-ai/claude-code`
-- Linux: `bubblewrap` und `socat` für die Sandbox (`sudo dnf install bubblewrap socat`), dazu `jq` für den Format-Hook
-
-### Neues Projekt
-
-1. Auf GitHub: "Use this template" → "Create a new repository"
-2. `git clone git@github.com:apefrei/<projekt>.git`
-3. `claude` im Projektverzeichnis starten
-
-Damit "Use this template" erscheint, muss das Repo einmalig unter Settings → General als **Template repository** markiert sein.
-
-### Bestehendes Projekt
+Only Docker with Compose v2.24+ is needed on the host.
 
 ```bash
-cp -r /pfad/zu/claude-playbook/.claude/ ./.claude/
-cp /pfad/zu/claude-playbook/CLAUDE.md ./CLAUDE.md
-cp /pfad/zu/claude-playbook/lessons.md ./lessons.md
-cp /pfad/zu/claude-playbook/.worktreeinclude ./.worktreeinclude
+cp .env.example .env    # set POSTGRES_PASSWORD
+docker compose -f compose.yaml -f compose.dev.yaml --profile local up --watch
 ```
 
-Danach `.claude/rules/dev-stack.md` auf das Projekt zuschneiden: nicht zutreffende Stacks löschen.
+Open `https://localhost:8443` (local certificate authority; accept the warning). Details, checks and the
+production-like stack: [docs/development.md](docs/development.md).
 
-## Wegweiser
+## Container images
 
-Ausführliche Anleitungen in [`docs/`](docs/):
+Every push to `main` publishes `ghcr.io/apefrei/commucal-web`, `commucal-mcp` and `commucal-worker`, tagged
+`main` and `sha-<commit>`, with SBOM and provenance attestations. Deployments use image digests.
 
-- [Einstieg](docs/onboarding.md) — Schrittweiser Einstieg in die Arbeit mit dem Playbook
-- [Claude Code Grundlagen](docs/claude-code-basics.md) — Sessions, Plan-Mode, Permissions, MCP
-- [Worktrees](docs/worktrees.md) — Parallele Branches im Filesystem
-- [Parallele Entwicklung](docs/parallel-development.md) — Workflow, Review-Kadenz, Auto-Accept
-- [Sicherheit beim parallelen Arbeiten](docs/security-parallel.md) — Credentials, Migrationen
-- [Agentic Code Review](docs/agentic-code-review.md) — Policy-as-Code und Human-in-the-Loop
-- [Architecture Decision Records](docs/adr/README.md) — Architekturentscheidungen dokumentieren
-- [Continuous Testing](docs/continuous-testing.md) — TDD mit Claude und KI-Evals
-- [DevSecOps](docs/devsecops.md) — Secret-Scanning, SBOM, Dependency-Pflege
-- [Progressive Delivery](docs/progressive-delivery.md) — CI/CD, Previews, Feature-Flags
-- [Agent Guardrails](docs/agent-guardrails.md) — Limits und Observability
+## Quality and security
 
-Regeln, die Claude direkt liest:
+- CI: gitleaks, Biome, TypeScript, Vitest, build, `pnpm audit`, Compose smoke test with container hardening checks
+- Dependabot for npm, GitHub Actions, Docker base images and Compose images
+- Second-opinion review of every pull request by Gemini (advisory)
+- Development with Claude Code follows the rules in [CLAUDE.md](CLAUDE.md) and [.claude/rules/](.claude/rules/)
 
-- [`CLAUDE.md`](CLAUDE.md) — Kern-Regeln, gelten in jeder Session
-- [`.claude/rules/`](.claude/rules/) — Tech-Stack, Sicherheit, Codequalität, Zugänglichkeit, Worktrees, Diagnose
-- [`lessons.md`](lessons.md) — Lektionen aus realen Korrekturen
+## Licence
 
-## Was im Repo liegt
-
-```
-├── CLAUDE.md                  # Kern-Regeln, jede Session
-├── .worktreeinclude           # Files, die in neue Worktrees kopiert werden
-├── .claude/
-│   ├── settings.json          # Berechtigungen, Sandbox und Hooks (im Repo)
-│   ├── rules/                 # Tech-Stack, Security, Quality, A11y, Worktrees, Policies, Diagnose
-│   ├── commands/              # /commit-push-pr, /review, /build-and-test, /setup-statusline
-│   ├── agents/                # code-reviewer, verify-app, spec-writer
-│   ├── hooks/                 # Auto-Formatting nach Edits
-│   ├── statusline.sh          # Statuszeile (macOS/Linux), optional, per /setup-statusline
-│   └── statusline.ps1         # Statuszeile (Windows), optional, per /setup-statusline
-├── .mcp.json                  # MCP-Server (GitHub, erweiterbar)
-├── .github/                   # CI (Lint, Test, Build, gitleaks, audit) und Dependabot
-├── docs/                      # Ausführliche Anleitungen
-├── lessons.md                 # Lektionen aus realen Korrekturen
-└── CONTRIBUTING.md            # Wie ich das Playbook pflege
-```
-
-## Verfügbare Agents und Commands
-
-| Agent | Zweck |
-|---|---|
-| `code-reviewer` | Sicherheits- und Qualitätsreview |
-| `verify-app` | Build und Tests verifizieren |
-| `spec-writer` | Spec aus Issue, Bug oder Notiz erzeugen |
-
-| Command | Zweck |
-|---|---|
-| `/commit-push-pr` | Committen, pushen, PR erstellen |
-| `/review` | Code Review des aktuellen Branches |
-| `/build-and-test` | Build und Tests laufen lassen |
-| `/setup-statusline` | Statuszeile einrichten (optional) |
-
-## Lokale Anpassung
-
-Overrides pro Rechner oder Projekt in `.claude/settings.local.json` (git-ignored):
-
-```json
-{
-  "permissions": {
-    "allow": ["Bash(docker *)"]
-  }
-}
-```
-
-## Pflege
-
-Siehe [CONTRIBUTING.md](CONTRIBUTING.md). Korrekturen aus realen Sessions gehören in [`lessons.md`](lessons.md).
-
-## Lizenz
-
-MIT
+[MIT](LICENSE). The name "CommuCal" and the domain commucal.ch are not covered by the licence.
