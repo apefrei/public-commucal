@@ -1,127 +1,59 @@
 ---
-description: Tech Stacks, Build-Commands und Projektstruktur für Entwicklungsprojekte
-globs: "*.ts,*.tsx,*.js,*.jsx,*.mjs,*.cjs,*.vue,*.svelte,*.astro,*.php,package.json,composer.json,Dockerfile,docker-compose*.yml"
+description: Tech-Stack, Build-Commands und Projektstruktur von CommuCal
+globs: "*.ts,*.tsx,*.js,*.mjs,*.css,package.json,pnpm-workspace.yaml,turbo.json,biome.json,Dockerfile,compose*.yaml"
 ---
 
-# Entwicklungs-Stack
+# Entwicklungs-Stack (CommuCal)
 
-Pro Projekt auf den tatsächlich genutzten Stack zuschneiden. Nicht zutreffende Abschnitte löschen.
+Zugeschnitten auf CommuCal. Entscheidungen und Begründungen: `docs/adr/` (vor allem ADR-0002, 0004, 0009).
+Versionen sind exakt gepinnt; neue Versionen nur über Dependabot oder einen eigenen PR.
 
-## Stack erkennen
+## Stack
 
-Bevor du Commands ausführst oder Code schreibst, erkenne Framework und Paketmanager:
-
-| Hinweis im Repo | Framework |
+| Bereich | Wahl |
 |---|---|
-| `next.config.*` | Next.js |
-| `vite.config.*` ohne Meta-Framework | Vite (React, Vue, Svelte, Solid) |
-| `nuxt.config.*` | Nuxt |
-| `svelte.config.*` | SvelteKit |
-| `astro.config.*` | Astro |
-| `angular.json` | Angular |
-| `react-router.config.*` | React Router (Framework Mode, ehemals Remix) |
-| `nest-cli.json` | NestJS |
-| `express`, `fastify`, `hono` in `package.json` | Node-API |
+| Laufzeit | Node 26 LTS (`.node-version`), `Temporal` nativ, TypeScript direkt ausführbar (Type Stripping) |
+| Sprache | TypeScript 7, strict, `erasableSyntaxOnly` in Node-Paketen (keine `enum`, `namespace`, Parameter-Properties) |
+| Paketmanager | pnpm 12 (Version aus `packageManager`), Workspaces, Turborepo 2 |
+| Web | Next.js 16 (App Router, Turbopack, React Compiler), React 19, Tailwind CSS 4 |
+| Validierung | zod |
+| Datenbank | PostgreSQL 18, Drizzle ORM 1.0 (RC, gepinnt), RLS gemäss ADR-0004 |
+| Cache | Valkey 9 |
+| Auth | Better Auth (ADR-0003) |
+| Logging | pino (kein `console.*`) |
+| Lint/Format | Biome 2 (ersetzt ESLint und Prettier, ADR-0009) |
+| Tests | Vitest (Unit/Integration), Playwright (E2E) |
+| Infrastruktur | Docker Compose, GitHub Actions, gitleaks |
 
-| Lockfile | Paketmanager |
-|---|---|
-| `package-lock.json` | npm |
-| `pnpm-lock.yaml` | pnpm |
-| `yarn.lock` | yarn |
-| `bun.lock` / `bun.lockb` | bun |
+## Regeln
 
-Immer den Paketmanager des Lockfiles verwenden, nie mischen. Ohne Lockfile: npm.
+- Zeitrechnung nur mit `Temporal`, nie mit `Date`-Arithmetik. Zeitzone der Mandanten: `TENANT_TIME_ZONE` aus `@commucal/core`.
+- Fachlogik (Wiederholungen, iCal, Berechtigungen, Import-Parsing) gehört nach `packages/core`, damit Web, MCP und Worker gleich rechnen.
+- Imports innerhalb von Node-Paketen mit `.ts`-Endung (`./time.ts`), weil Node die Dateien direkt ausführt.
+- Workspace-Pakete exportieren TypeScript-Quellen (`exports: ./src/index.ts`); Next.js bindet sie über `transpilePackages` ein.
 
-## Tech Stacks
+## Commands
 
-### Allgemein für alle JS/TS-Projekte
-- Sprache: TypeScript (strict)
-- Styling: Tailwind CSS
-- Linting: ESLint, Prettier
-- Tests: vitest (Unit), Playwright (E2E)
-- Validierung: zod
-
-### Vite + React (Standard für einfache SPAs und PWAs)
-- UI: React
-- Data Fetching: TanStack Query
-- Routing: React Router
-- Tests: React Testing Library
-
-### Next.js (Standard für Fullstack- und SEO-relevante Projekte)
-- App Router, Server Components als Default, `"use client"` nur wo nötig
-- Server Actions oder Route Handlers für Mutationen
-- ORM: Drizzle oder Prisma
-- Auth: Auth.js oder Better Auth
-
-### Vue / Nuxt
-- Composition API mit `<script setup lang="ts">`
-- State: Pinia
-- Nuxt: Server Routes unter `server/api/`
-
-### Svelte / SvelteKit
-- Svelte 5 mit Runes (`$state`, `$derived`, `$props`)
-- SvelteKit: Daten über `load`-Funktionen, Mutationen über Form Actions
-
-### Astro
-- Für content-lastige Seiten (Blogs, Landingpages, Doku)
-- Statisch by default, Islands nur für interaktive Teile
-
-### Angular
-- Standalone Components, Signals
-- Angular CLI für Generierung und Build
-
-### Backend / API
-- Node.js mit Express, Fastify, Hono oder NestJS
-- Datenbank: PostgreSQL (`pg`, Drizzle oder Prisma)
-- Auth: bcrypt/argon2 für Passwörter, `jose` oder `jsonwebtoken` für JWT
-- Absicherung: helmet (bzw. Framework-Äquivalent), CORS, Rate Limiting
-
-### Infrastruktur
-- Lokal und Produktion: Docker / Docker Compose
-- CI/CD: GitHub Actions
-- Secret-Scanning: gitleaks
-
-### PHP (Altprojekte)
-- Plain PHP 8+ in Docker, PSR-12 Standard
-- Composer, falls vorhanden
-
-## Build & Test Commands
-
-Die Scripts aus `package.json` verwenden, nicht die Framework-CLI direkt. Mit dem erkannten Paketmanager (`npm run`, `pnpm`, `yarn`, `bun run`):
+Alles mit pnpm aus dem Repo-Root. Auf cyberfrog ist Node nicht installiert: Commands im Container ausführen
+(bis WP-1.1 Teil 2 mit `node:26-alpine`, danach über die Compose-Profile `dev` und `test`).
 
 ```bash
-<pm> install        # Install dependencies
-<pm> run dev        # Development server
-<pm> run build      # Production build
-<pm> test           # Run tests
-<pm> run lint       # Linting
-<pm> run format     # Prettier (if defined)
-```
-
-Typecheck, falls kein eigenes Script existiert:
-
-| Framework | Typecheck |
-|---|---|
-| Vite, Next.js, Node | `npx tsc --noEmit` (bei Project References `npx tsc -b`) |
-| Nuxt | `npx nuxi typecheck` |
-| SvelteKit | `npx svelte-check` |
-| Astro | `npx astro check` |
-| Vue (Vite) | `npx vue-tsc --noEmit` |
-| Angular | `npx ng build` (prüft Typen beim Build) |
-
-### Docker
-```bash
-docker compose up -d       # Start services
-docker compose logs -f     # Follow logs
-docker compose down        # Stop services
+pnpm install --frozen-lockfile   # Abhängigkeiten
+pnpm dev                         # Alle Apps im Entwicklungsmodus
+pnpm lint                        # Biome: Lint und Format prüfen
+pnpm format                      # Biome: Fixes anwenden
+pnpm typecheck                   # TypeScript in allen Paketen
+pnpm test                        # Vitest in allen Paketen
+pnpm build                       # Produktions-Build
+pnpm audit --audit-level=high    # Sicherheitslücken in Abhängigkeiten
 ```
 
 ## Verifikation
 
 Prüfe JEDE Änderung bevor du sie als fertig meldest:
-1. Build muss durchlaufen
-2. Linting und Typecheck müssen bestehen
-3. Falls UI-Änderung: beschreibe was du visuell erwartest
+1. `pnpm lint`, `pnpm typecheck`, `pnpm test` und `pnpm build` bestehen
+2. Falls UI-Änderung: beschreibe was du visuell erwartest
+3. Angeben, was getestet wurde und was nicht (z. B. nur Unit-Tests, keine Datenbank)
 
 ## Verbotene Eigenimplementierungen
 
@@ -129,35 +61,28 @@ Baue folgendes NIEMALS selbst. Verwende die genannte Bibliothek oder frage nach:
 
 | Thema | Verwende stattdessen |
 |---|---|
-| Auth/Login | Auth.js, Better Auth, Supabase Auth, Clerk |
-| Passwort-Hashing | bcrypt, argon2 |
-| JWT | jose, jsonwebtoken |
+| Auth/Login, MFA | Better Auth |
+| Passwort-Hashing | Better Auth (intern), sonst argon2 |
 | Krypto allgemein | `node:crypto` / Web Crypto, keine eigenen Algorithmen |
-| E-Mail | Resend, Postmark |
-| Zahlungen | Stripe SDK |
-| Datei-Upload | multer, UploadThing, presigned URLs |
-| Rate Limiting | express-rate-limit, @upstash/ratelimit, Framework-Middleware |
+| E-Mail | Resend (ADR-0006) |
+| Rechnungen / QR-Rechnung | swissqrbill (ADR-0008) |
+| Datei-Upload | `Request.formData()` mit Grössen- und Inhaltsprüfung (ADR-0002) |
+| Rate Limiting | rate-limiter-flexible auf Valkey (ADR-0007) |
+| Bot-Schutz | ALTCHA (ADR-0007) |
 | Validierung | zod |
-| Bot-Schutz | Cloudflare Turnstile, hCaptcha |
+| iCal | ical-generator; Wiederholungen mit rrule-temporal |
 
 ## Projektstruktur
 
-Die Konvention des Frameworks hat Vorrang. Ohne Framework-Vorgabe (Vite + separate API):
-
 ```
-├── src/                  # Frontend
-│   ├── components/
-│   │   ├── ui/           # Reusable UI components
-│   │   └── features/     # Domain-specific components
-│   ├── pages/            # Route components
-│   ├── hooks/            # Custom hooks / composables
-│   ├── lib/              # Utility functions, API client, configuration
-│   └── types/            # TypeScript types
-├── api/                  # Backend (Express, Fastify, Hono)
-│   └── src/
-├── db/                   # Schema, migrations, init scripts
-├── docker-compose.yml
-└── .github/workflows/    # CI/CD
+apps/web          Next.js: öffentliche Seiten, Backend, API, Feeds (src/app, src/components, src/lib, src/server)
+apps/mcp          MCP-Server (ADR-0005)
+apps/worker       Hintergrundjobs (pg-boss)
+packages/core     Fachlogik, von allen Apps genutzt
+packages/db       Drizzle-Schema, Migrationen, Rollen, RLS
+packages/config   Gemeinsame TypeScript-Konfiguration
+deploy/           Compose, Caddy (Staging), nginx-Snippet (Produktion), Runbooks
+docs/             Anforderungen (requirements.md) und ADRs
 ```
 
-Next.js: `src/app/` (Routen), `src/components/`, `src/lib/`, `src/server/` (DB-Queries, Services, nie im Client importieren).
+Next.js: `src/server/` enthält DB-Zugriffe und Services und wird nie im Client importiert.

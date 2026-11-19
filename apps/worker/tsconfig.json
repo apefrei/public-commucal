@@ -1,0 +1,4 @@
+{
+  "extends": "@commucal/config/tsconfig.node.json",
+  "include": ["src"]
+}

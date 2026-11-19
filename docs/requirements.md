@@ -316,7 +316,7 @@ Details in ADR-0002. Summary:
 | Language / runtime | TypeScript 7 (strict), Node 26 LTS, pnpm workspaces |
 | Web | Next.js 16 (App Router), React 19, Tailwind CSS 4 |
 | Validation | zod 4 |
-| Database | PostgreSQL 18, Drizzle ORM (ADR-0004) |
+| Database | PostgreSQL 18, Drizzle ORM 1.0 (ADR-0004, ADR-0009) |
 | Auth | Better Auth with two-factor and organization plugins (ADR-0003) |
 | Jobs | pg-boss (queue in PostgreSQL) |
 | Cache / rate limiting | Valkey 9, rate-limiter-flexible (ADR-0007) |
@@ -328,6 +328,8 @@ Details in ADR-0002. Summary:
 | Invoices | swissqrbill with pdfkit (ADR-0008) |
 | Bot protection | ALTCHA (ADR-0007) |
 | MCP | Official MCP TypeScript SDK (ADR-0005) |
+| Lint / format | Biome 2 (ADR-0009) |
+| Monorepo | pnpm 12, Turborepo 2 |
 | Tests | vitest, Playwright, axe-core, MCP Inspector |
 
 Repository layout:

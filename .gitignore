@@ -23,6 +23,8 @@ out/
 .angular/
 .vercel/
 .turbo/
+next-env.d.ts
+*.tsbuildinfo
 
 # PHP
 vendor/
