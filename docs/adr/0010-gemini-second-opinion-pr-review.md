@@ -27,11 +27,14 @@ Details:
 - Secret: `GEMINI_API_KEY` (repository secret). Sent in the `x-goog-api-key` header, never in the URL. Without the
   secret, the job skips with a notice.
 - Scope: pull requests from this repository only; forks and Dependabot are skipped (no secrets available there).
-- Input: diff from merge base to head, lock files and snapshots excluded, capped at 400,000 characters (marked as
-  truncated in the comment).
-- Review criteria from `CLAUDE.md` and `.claude/rules/` (security, policies, code quality, stack), read from the PR's
-  base commit so a PR cannot change the rules it is reviewed against; findings must cite
-  `path:line`, uncertain points must be marked, severities 🛑 / ⚠️ / 💡 match `policies.md`.
+- Input: diff from merge base to head, lock files and snapshots excluded, capped at 150,000 characters (marked as
+  truncated in the comment). PRs that only change documentation (`*.md`, `docs/`, `LICENSE`) are skipped.
+- Lean reviews (owner's request, 2026-11-19): at most 5 findings, only 🛑 must fix and ⚠️ should fix (bugs,
+  security, data loss, rule violations); style, small refactorings and unlikely edge cases are ignored; one or two
+  sentences per finding; "✅ No important issues found." when there is nothing important.
+- Review criteria from `.claude/rules/security.md` and `.claude/rules/policies.md`, read from the PR's base commit so
+  a PR cannot change the rules it is reviewed against; style and stack rules are left to Biome and CI. Findings must
+  cite `path:line`; uncertain points must be marked.
 - Prompt injection: PR text and diff are declared untrusted in the system instruction. The model has no tools; its only
   effect is the text of one comment, written with a token limited to `contents: read` and `pull-requests: write`.
 - One comment per PR (hidden marker), updated on each push; concurrent runs for the same PR are cancelled.
