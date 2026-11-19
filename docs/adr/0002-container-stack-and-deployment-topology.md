@@ -6,7 +6,7 @@
 
 ## Context
 
-Commucal is a multi-tenant web product (see [`docs/requirements.md`](../requirements.md)) that must run as a
+CommuCal is a multi-tenant web product (see [`docs/requirements.md`](../requirements.md)) that must run as a
 self-contained container stack. Constraints:
 
 - Production runs on the owner's own server at Hetzner (EU). That server already runs nginx as an upstream proxy
