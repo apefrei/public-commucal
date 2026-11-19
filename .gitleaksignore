@@ -1,0 +1,2 @@
+# False positive: playbook template text "`jose` oder `jsonwebtoken` für JWT" in the initial commit (line removed later).
+124f7e0ac4bfa23252920dce74b75fb64c87f48e:.claude/rules/dev-stack.md:generic-api-key:76
