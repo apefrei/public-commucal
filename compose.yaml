@@ -1,0 +1,147 @@
+# CommuCal container stack (ADR-0002).
+#   docker compose up -d                      production-like stack; web and mcp on 127.0.0.1 for the host nginx
+#   docker compose --profile local up -d      plus Caddy with HTTPS (staging on cyberfrog, local development)
+#   docker compose --profile test run --rm test
+# Development with live sync: see compose.dev.yaml and docs/development.md.
+
+name: commucal
+
+x-hardening: &hardening
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: postgres:18.7-alpine
+    environment:
+      POSTGRES_DB: commucal
+      POSTGRES_USER: commucal_owner
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql
+    networks: [data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U commucal_owner -d commucal"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+
+  valkey:
+    <<: *hardening
+    image: valkey/valkey:9.2.0-alpine
+    # Cache and rate-limit counters only: no persistence (NFR-9).
+    command:
+      [
+        "valkey-server",
+        "--save",
+        "",
+        "--appendonly",
+        "no",
+        "--maxmemory",
+        "256mb",
+        "--maxmemory-policy",
+        "allkeys-lru",
+      ]
+    # Start as the image's valkey user, so the entrypoint needs no chown/setuid capabilities.
+    user: "999:1000"
+    tmpfs: ["/data:uid=999,gid=1000"]
+    networks: [data]
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  web:
+    <<: *hardening
+    build:
+      context: .
+      target: web
+    image: commucal-web:local
+    tmpfs: [/tmp, /app/apps/web/.next/cache]
+    ports:
+      - "${WEB_BIND:-127.0.0.1}:${WEB_PORT:-3000}:3000"
+    networks: [edge, data]
+    depends_on:
+      postgres: { condition: service_healthy }
+      valkey: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+
+  mcp:
+    <<: *hardening
+    build:
+      context: .
+      target: mcp
+    image: commucal-mcp:local
+    tmpfs: [/tmp]
+    ports:
+      - "${MCP_BIND:-127.0.0.1}:${MCP_PORT:-3001}:3001"
+    networks: [edge, data]
+    depends_on:
+      postgres: { condition: service_healthy }
+      valkey: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3001/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+
+  worker:
+    <<: *hardening
+    build:
+      context: .
+      target: worker
+    image: commucal-worker:local
+    tmpfs: [/tmp]
+    networks: [edge, data]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  proxy:
+    profiles: [local]
+    <<: *hardening
+    image: caddy:2.11.9-alpine
+    cap_add: [NET_BIND_SERVICE]
+    environment:
+      COMMUCAL_HOST: ${COMMUCAL_HOST:-localhost}
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    ports:
+      - "${PROXY_BIND:-127.0.0.1}:${PROXY_PORT:-8443}:443"
+    networks: [edge]
+    depends_on:
+      web: { condition: service_healthy }
+      mcp: { condition: service_healthy }
+
+  test:
+    profiles: [test]
+    build:
+      context: .
+      target: test
+    image: commucal-test:local
+    networks: [data]
+    depends_on:
+      postgres: { condition: service_healthy }
+      valkey: { condition: service_healthy }
+
+networks:
+  # Reachable from the host and the internet (egress, e.g. email).
+  edge: {}
+  # Database and cache: no route to the outside.
+  data:
+    internal: true
+
+volumes:
+  pgdata: {}
+  caddy_data: {}
+  caddy_config: {}
