@@ -8,18 +8,22 @@ import { readFileSync } from "node:fs";
 const MARKER = "<!-- commucal:gemini-review -->";
 const DEFAULT_MODEL = "gemini-pro-latest";
 const MAX_DIFF_CHARS = 400_000;
-const REQUEST_TIMEOUT_MS = 300_000;
+const MAX_OUTPUT_TOKENS = 65_536;
 const MAX_ATTEMPTS = 5;
 // Waits between attempts when the API is overloaded (seconds); a Retry-After header takes precedence.
 const BACKOFF_SECONDS = [20, 40, 60, 90];
+const REQUEST_TIMEOUT_MS = 180_000;
+const SIDE_REQUEST_TIMEOUT_MS = 30_000;
+// Stay below the workflow's timeout-minutes (15) so overloads end as a warning, not a killed job.
+const TIME_BUDGET_MS = 12 * 60_000;
+const MIN_REQUEST_TIME_MS = 30_000;
 
-// Files that add noise but no reviewable logic.
-const EXCLUDED_PATHS = [
-  ":(exclude)pnpm-lock.yaml",
-  ":(exclude)**/pnpm-lock.yaml",
-  ":(exclude)**/package-lock.json",
-  ":(exclude)**/*.snap",
-  ":(exclude)**/*.svg",
+// Files that add noise but no reviewable logic. "glob" makes "**/" also match the repository root.
+export const EXCLUDED_PATHS = [
+  ":(exclude,glob)**/pnpm-lock.yaml",
+  ":(exclude,glob)**/package-lock.json",
+  ":(exclude,glob)**/*.snap",
+  ":(exclude,glob)**/*.svg",
 ];
 
 // Project rules the reviewer checks against. Missing files are skipped.
@@ -30,6 +34,14 @@ const RULE_FILES = [
   ".claude/rules/code-quality.md",
   ".claude/rules/dev-stack.md",
 ];
+
+const BLOCKING_FINISH_REASONS = new Set([
+  "SAFETY",
+  "RECITATION",
+  "BLOCKLIST",
+  "PROHIBITED_CONTENT",
+  "SPII",
+]);
 
 const SYSTEM_INSTRUCTION = `You are a critical senior software engineer giving a second-opinion review of a pull
 request in the CommuCal repository (multi-tenant public calendars for Swiss municipalities; TypeScript, Next.js,
@@ -47,15 +59,18 @@ Rules:
 - Write in English, compact Markdown. Start with a one-line verdict. Then findings grouped by severity, each with
   location, problem, and a concrete fix (code if helpful). If there is nothing significant, say so in one line.`;
 
-/** The model is overloaded or rate-limited even after all retries; not a configuration error. */
-class ServiceUnavailableError extends Error {}
+/** The model is overloaded, rate-limited or out of time even after all retries; not a configuration error. */
+export class ServiceUnavailableError extends Error {}
 
-interface GeminiPart {
+/** Gemini refused to answer because of the content; not a problem of this repository's configuration. */
+export class BlockedError extends Error {}
+
+export interface GeminiPart {
   text?: string;
   thought?: boolean;
 }
 
-interface GeminiResponse {
+export interface GeminiResponse {
   candidates?: { content?: { parts?: GeminiPart[] }; finishReason?: string }[];
   promptFeedback?: { blockReason?: string };
   usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
@@ -67,9 +82,37 @@ interface IssueComment {
   user?: { login?: string };
 }
 
+export interface GenerateOptions {
+  apiKey: string;
+  model: string;
+  prompt: string;
+  /** Epoch milliseconds after which no new request is started. */
+  deadline: number;
+  sleep?: (ms: number) => Promise<void>;
+  now?: () => number;
+}
+
 /** Writes to stdout; GitHub Actions reads workflow commands such as ::notice:: from there. */
 function log(message: string): void {
   process.stdout.write(`${message}\n`);
+}
+
+/** Collapses whitespace so a message fits into a single-line GitHub annotation. */
+export function oneLine(text: string, maxLength = 500): string {
+  return text.replace(/\s+/g, " ").trim().slice(0, maxLength);
+}
+
+/** Reduces an API error body to a single line. */
+export function errorMessage(body: string): string {
+  try {
+    const parsed = JSON.parse(body) as { error?: { message?: string; status?: string } };
+    if (parsed.error?.message) {
+      return oneLine(`${parsed.error.status ?? "ERROR"}: ${parsed.error.message}`);
+    }
+  } catch {
+    // Not JSON; fall through to the raw text.
+  }
+  return oneLine(body, 300);
 }
 
 function env(name: string): string {
@@ -98,104 +141,125 @@ function readRules(): string {
   }).join("\n\n");
 }
 
-function sleep(ms: number): Promise<void> {
+function defaultSleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function listModels(apiKey: string): Promise<string[]> {
-  const res = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000", {
-    headers: { "x-goog-api-key": apiKey },
-  });
-  if (!res.ok) {
+  try {
+    const res = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000",
+      {
+        headers: { "x-goog-api-key": apiKey },
+        signal: AbortSignal.timeout(SIDE_REQUEST_TIMEOUT_MS),
+      },
+    );
+    if (!res.ok) {
+      return [];
+    }
+    const data = (await res.json()) as {
+      models?: { name: string; supportedGenerationMethods?: string[] }[];
+    };
+    return (data.models ?? [])
+      .filter((m) => m.supportedGenerationMethods?.includes("generateContent"))
+      .map((m) => m.name.replace(/^models\//, ""));
+  } catch {
     return [];
   }
-  const data = (await res.json()) as {
-    models?: { name: string; supportedGenerationMethods?: string[] }[];
-  };
-  return (data.models ?? [])
-    .filter((m) => m.supportedGenerationMethods?.includes("generateContent"))
-    .map((m) => m.name.replace(/^models\//, ""));
 }
 
-/** Reduces an API error body to a single line, as GitHub annotations show only one line. */
-function errorMessage(body: string): string {
-  try {
-    const parsed = JSON.parse(body) as { error?: { message?: string; status?: string } };
-    if (parsed.error?.message) {
-      return `${parsed.error.status ?? "ERROR"}: ${parsed.error.message}`;
-    }
-  } catch {
-    // Not JSON; fall through to the raw text.
+function waitSecondsFor(res: Response | undefined, attempt: number): number {
+  const retryAfter = Number(res?.headers.get("retry-after"));
+  if (Number.isFinite(retryAfter) && retryAfter > 0) {
+    return Math.min(retryAfter, 120);
   }
-  return body.replace(/\s+/g, " ").slice(0, 300);
+  return BACKOFF_SECONDS[attempt - 1] ?? 90;
 }
 
-async function generateReview(
-  apiKey: string,
-  model: string,
-  prompt: string,
-): Promise<GeminiResponse> {
+/** Calls generateContent with retries on overload, rate limits, timeouts and network errors. */
+export async function generateReview(options: GenerateOptions): Promise<GeminiResponse> {
+  const { apiKey, model, prompt, deadline } = options;
+  const sleep = options.sleep ?? defaultSleep;
+  const now = options.now ?? Date.now;
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
   const body = JSON.stringify({
     systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
     contents: [{ role: "user", parts: [{ text: prompt }] }],
-    generationConfig: { maxOutputTokens: 16_384 },
+    generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS },
   });
 
   for (let attempt = 1; ; attempt++) {
-    const res = await fetch(url, {
-      method: "POST",
-      // Key in a header, not in the URL, so it never appears in logged URLs or error messages.
-      headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
-      body,
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
-    if (res.ok) {
-      return (await res.json()) as GeminiResponse;
+    const remaining = deadline - now();
+    if (remaining < MIN_REQUEST_TIME_MS) {
+      throw new ServiceUnavailableError(`${model}: time budget exhausted`);
     }
-    const detail = errorMessage(await res.text());
-    if (res.status === 404) {
-      const models = await listModels(apiKey);
-      throw new Error(
-        `Model "${model}" not found. Set the repository variable GEMINI_MODEL to one of: ${models.join(", ") || "(could not list models)"}`,
-      );
+
+    let res: Response | undefined;
+    let failure = "unknown error";
+    try {
+      res = await fetch(url, {
+        method: "POST",
+        // Key in a header, not in the URL, so it never appears in logged URLs or error messages.
+        headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
+        body,
+        signal: AbortSignal.timeout(Math.min(REQUEST_TIMEOUT_MS, remaining)),
+      });
+    } catch (error) {
+      // Timeouts and network errors are transient from our point of view.
+      failure = `request failed (${error instanceof Error ? error.name : "error"})`;
     }
-    const retryable = res.status === 429 || res.status >= 500;
-    if (!retryable) {
-      throw new Error(`Gemini API returned ${res.status}: ${detail}`);
+
+    if (res) {
+      if (res.ok) {
+        return (await res.json()) as GeminiResponse;
+      }
+      const detail = errorMessage(await res.text());
+      if (res.status === 404) {
+        const models = await listModels(apiKey);
+        throw new Error(
+          `Model "${model}" not found. Set the repository variable GEMINI_MODEL to one of: ${models.join(", ") || "(could not list models)"}`,
+        );
+      }
+      if (res.status !== 429 && res.status < 500) {
+        throw new Error(`Gemini API returned ${res.status}: ${detail}`);
+      }
+      failure = `${res.status} ${detail}`;
     }
+
     if (attempt >= MAX_ATTEMPTS) {
-      throw new ServiceUnavailableError(`${model}: ${res.status} ${detail}`);
+      throw new ServiceUnavailableError(`${model}: ${failure}`);
     }
-    const retryAfter = Number(res.headers.get("retry-after"));
-    const waitSeconds =
-      Number.isFinite(retryAfter) && retryAfter > 0
-        ? Math.min(retryAfter, 120)
-        : (BACKOFF_SECONDS[attempt - 1] ?? 90);
+    const waitMs = waitSecondsFor(res, attempt) * 1000;
+    if (now() + waitMs + MIN_REQUEST_TIME_MS > deadline) {
+      throw new ServiceUnavailableError(`${model}: ${failure}; no time left to retry`);
+    }
     log(
-      `Gemini API returned ${res.status} for ${model}, retrying in ${waitSeconds}s (attempt ${attempt}/${MAX_ATTEMPTS})`,
+      `Gemini API: ${failure} for ${model}, retrying in ${waitMs / 1000}s (attempt ${attempt}/${MAX_ATTEMPTS})`,
     );
-    await sleep(waitSeconds * 1000);
+    await sleep(waitMs);
   }
 }
 
-function extractText(response: GeminiResponse): string {
+/** Returns the visible review text; thought parts are skipped. */
+export function extractText(response: GeminiResponse): string {
   const blockReason = response.promptFeedback?.blockReason;
   if (blockReason) {
-    throw new Error(`Gemini blocked the request: ${blockReason}`);
+    throw new BlockedError(`Gemini blocked the request: ${blockReason}`);
   }
   const candidate = response.candidates?.[0];
+  const finishReason = candidate?.finishReason ?? "unknown";
+  if (BLOCKING_FINISH_REASONS.has(finishReason)) {
+    throw new BlockedError(`Gemini stopped the answer: ${finishReason}`);
+  }
   const text = (candidate?.content?.parts ?? [])
     .filter((part) => !part.thought && part.text)
     .map((part) => part.text)
     .join("")
     .trim();
   if (!text) {
-    throw new Error(
-      `Gemini returned no text (finishReason: ${candidate?.finishReason ?? "unknown"})`,
-    );
+    throw new Error(`Gemini returned no text (finishReason: ${finishReason})`);
   }
-  if (candidate?.finishReason === "MAX_TOKENS") {
+  if (finishReason === "MAX_TOKENS") {
     return `${text}\n\n_(Review was cut off at the output limit.)_`;
   }
   return text;
@@ -210,6 +274,7 @@ async function github(path: string, init: RequestInit = {}): Promise<Response> {
       "x-github-api-version": "2022-11-28",
       "content-type": "application/json",
     },
+    signal: AbortSignal.timeout(SIDE_REQUEST_TIMEOUT_MS),
   });
   if (!res.ok) {
     throw new Error(`GitHub API ${init.method ?? "GET"} ${path} returned ${res.status}`);
@@ -252,7 +317,14 @@ async function upsertComment(
   }
 }
 
+async function postNotice(repo: string, prNumber: string, text: string): Promise<void> {
+  // A notice never replaces an earlier review; it only appears if there is no review yet.
+  const body = [MARKER, "## 🤖 Gemini second-opinion review", text].join("\n\n");
+  await upsertComment(repo, prNumber, body, { keepExisting: true });
+}
+
 async function main(): Promise<void> {
+  const deadline = Date.now() + TIME_BUDGET_MS;
   const apiKey = env("GEMINI_API_KEY");
   if (!apiKey) {
     log("::notice::GEMINI_API_KEY is not set; skipping the Gemini review.");
@@ -265,6 +337,7 @@ async function main(): Promise<void> {
   const prNumber = requireEnv("PR_NUMBER");
   const baseSha = requireEnv("BASE_SHA");
   const headSha = requireEnv("HEAD_SHA");
+  const shortSha = headSha.slice(0, 7);
 
   const range = `${baseSha}...${headSha}`;
   const fullDiff = git(["diff", "--no-color", range, "--", ".", ...EXCLUDED_PATHS]);
@@ -272,7 +345,7 @@ async function main(): Promise<void> {
     log("::notice::No reviewable changes; skipping.");
     return;
   }
-  const stat = git(["diff", "--stat", range]);
+  const stat = git(["diff", "--stat", range, "--", ".", ...EXCLUDED_PATHS]);
   const truncated = fullDiff.length > MAX_DIFF_CHARS;
   const diff = truncated ? fullDiff.slice(0, MAX_DIFF_CHARS) : fullDiff;
 
@@ -293,7 +366,7 @@ async function main(): Promise<void> {
   const unavailable: string[] = [];
   for (const candidate of models) {
     try {
-      response = await generateReview(apiKey, candidate, prompt);
+      response = await generateReview({ apiKey, model: candidate, prompt, deadline });
       model = candidate;
       break;
     } catch (error) {
@@ -305,25 +378,36 @@ async function main(): Promise<void> {
   }
   if (!response) {
     // Overload is temporary and outside our control: warn instead of failing the PR checks.
-    log(`::warning::Gemini review not available, models overloaded: ${unavailable.join("; ")}`);
-    await upsertComment(
+    log(`::warning::${oneLine(`Gemini review not available: ${unavailable.join("; ")}`)}`);
+    await postNotice(
       repo,
       prNumber,
-      [
-        MARKER,
-        "## 🤖 Gemini second-opinion review",
-        `Not available for commit \`${headSha.slice(0, 7)}\`: Gemini was overloaded (${models.join(", ")}). Re-run the workflow or push again.`,
-      ].join("\n\n"),
-      { keepExisting: true },
+      `Not available for commit \`${shortSha}\`: Gemini was overloaded (${models.join(", ")}). Re-run the workflow or push again.`,
     );
     return;
   }
-  const review = extractText(response);
-  const usage = response.usageMetadata;
 
+  let review: string;
+  try {
+    review = extractText(response);
+  } catch (error) {
+    if (!(error instanceof BlockedError)) {
+      throw error;
+    }
+    // Content filters can trigger on legitimate security code; an advisory review must not fail the PR for that.
+    log(`::warning::${oneLine(error.message)}`);
+    await postNotice(
+      repo,
+      prNumber,
+      `Not available for commit \`${shortSha}\`: ${error.message}. Review this change manually.`,
+    );
+    return;
+  }
+
+  const usage = response.usageMetadata;
   const footer = [
     `Model \`${model}\``,
-    `commit \`${headSha.slice(0, 7)}\``,
+    `commit \`${shortSha}\``,
     usage
       ? `${usage.promptTokenCount ?? "?"} input / ${usage.candidatesTokenCount ?? "?"} output tokens`
       : "",
@@ -342,8 +426,10 @@ async function main(): Promise<void> {
   log(`Review posted for PR #${prNumber} (${model}).`);
 }
 
-main().catch((error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error);
-  log(`::error::${message}`);
-  process.exit(1);
-});
+if (import.meta.main) {
+  main().catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    log(`::error::${oneLine(message)}`);
+    process.exit(1);
+  });
+}

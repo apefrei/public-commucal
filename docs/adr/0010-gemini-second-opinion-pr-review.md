@@ -34,6 +34,9 @@ Details:
 - Prompt injection: PR text and diff are declared untrusted in the system instruction. The model has no tools; its only
   effect is the text of one comment, written with a token limited to `contents: read` and `pull-requests: write`.
 - One comment per PR (hidden marker), updated on each push; concurrent runs for the same PR are cancelled.
+- Content filter stops (blocked prompt or safety finish) end as a warning with a note, like overloads.
+- Overall time budget of 12 minutes inside the 15-minute job timeout; all HTTP calls have timeouts.
+- Unit tests with Node's built-in test runner (`.github/scripts/gemini-review.test.mts`, job `script-tests`).
 
 ## Rationale
 
