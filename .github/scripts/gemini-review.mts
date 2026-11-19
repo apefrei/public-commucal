@@ -9,7 +9,9 @@ const MARKER = "<!-- commucal:gemini-review -->";
 const DEFAULT_MODEL = "gemini-pro-latest";
 const MAX_DIFF_CHARS = 400_000;
 const REQUEST_TIMEOUT_MS = 300_000;
-const MAX_ATTEMPTS = 3;
+const MAX_ATTEMPTS = 5;
+// Waits between attempts when the API is overloaded (seconds); a Retry-After header takes precedence.
+const BACKOFF_SECONDS = [20, 40, 60, 90];
 
 // Files that add noise but no reviewable logic.
 const EXCLUDED_PATHS = [
@@ -44,6 +46,9 @@ Rules:
 - Severity: 🛑 blocker (must fix before merge), ⚠️ should fix, 💡 suggestion.
 - Write in English, compact Markdown. Start with a one-line verdict. Then findings grouped by severity, each with
   location, problem, and a concrete fix (code if helpful). If there is nothing significant, say so in one line.`;
+
+/** The model is overloaded or rate-limited even after all retries; not a configuration error. */
+class ServiceUnavailableError extends Error {}
 
 interface GeminiPart {
   text?: string;
@@ -156,11 +161,21 @@ async function generateReview(
       );
     }
     const retryable = res.status === 429 || res.status >= 500;
-    if (!retryable || attempt >= MAX_ATTEMPTS) {
+    if (!retryable) {
       throw new Error(`Gemini API returned ${res.status}: ${detail}`);
     }
-    log(`Gemini API returned ${res.status}, retrying (attempt ${attempt}/${MAX_ATTEMPTS})`);
-    await sleep(attempt * 15_000);
+    if (attempt >= MAX_ATTEMPTS) {
+      throw new ServiceUnavailableError(`${model}: ${res.status} ${detail}`);
+    }
+    const retryAfter = Number(res.headers.get("retry-after"));
+    const waitSeconds =
+      Number.isFinite(retryAfter) && retryAfter > 0
+        ? Math.min(retryAfter, 120)
+        : (BACKOFF_SECONDS[attempt - 1] ?? 90);
+    log(
+      `Gemini API returned ${res.status} for ${model}, retrying in ${waitSeconds}s (attempt ${attempt}/${MAX_ATTEMPTS})`,
+    );
+    await sleep(waitSeconds * 1000);
   }
 }
 
@@ -202,7 +217,12 @@ async function github(path: string, init: RequestInit = {}): Promise<Response> {
   return res;
 }
 
-async function upsertComment(repo: string, prNumber: string, body: string): Promise<void> {
+async function upsertComment(
+  repo: string,
+  prNumber: string,
+  body: string,
+  { keepExisting = false }: { keepExisting?: boolean } = {},
+): Promise<void> {
   let existing: IssueComment | undefined;
   for (let page = 1; !existing; page++) {
     const res = await github(
@@ -215,6 +235,9 @@ async function upsertComment(repo: string, prNumber: string, body: string): Prom
     if (comments.length < 100) {
       break;
     }
+  }
+  if (existing && keepExisting) {
+    return;
   }
   if (existing) {
     await github(`/repos/${repo}/issues/comments/${existing.id}`, {
@@ -235,7 +258,9 @@ async function main(): Promise<void> {
     log("::notice::GEMINI_API_KEY is not set; skipping the Gemini review.");
     return;
   }
-  const model = env("GEMINI_MODEL") || DEFAULT_MODEL;
+  const models = [env("GEMINI_MODEL") || DEFAULT_MODEL, env("GEMINI_FALLBACK_MODEL")].filter(
+    Boolean,
+  );
   const repo = requireEnv("GITHUB_REPOSITORY");
   const prNumber = requireEnv("PR_NUMBER");
   const baseSha = requireEnv("BASE_SHA");
@@ -263,7 +288,36 @@ async function main(): Promise<void> {
     diff,
   ].join("\n\n");
 
-  const response = await generateReview(apiKey, model, prompt);
+  let model = "";
+  let response: GeminiResponse | undefined;
+  const unavailable: string[] = [];
+  for (const candidate of models) {
+    try {
+      response = await generateReview(apiKey, candidate, prompt);
+      model = candidate;
+      break;
+    } catch (error) {
+      if (!(error instanceof ServiceUnavailableError)) {
+        throw error;
+      }
+      unavailable.push(error.message);
+    }
+  }
+  if (!response) {
+    // Overload is temporary and outside our control: warn instead of failing the PR checks.
+    log(`::warning::Gemini review not available, models overloaded: ${unavailable.join("; ")}`);
+    await upsertComment(
+      repo,
+      prNumber,
+      [
+        MARKER,
+        "## 🤖 Gemini second-opinion review",
+        `Not available for commit \`${headSha.slice(0, 7)}\`: Gemini was overloaded (${models.join(", ")}). Re-run the workflow or push again.`,
+      ].join("\n\n"),
+      { keepExisting: true },
+    );
+    return;
+  }
   const review = extractText(response);
   const usage = response.usageMetadata;
 

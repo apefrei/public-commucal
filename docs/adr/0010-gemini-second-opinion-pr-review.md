@@ -19,8 +19,11 @@ updated on every push. The review is advisory and never a required check.
 Details:
 
 - Script: `.github/scripts/gemini-review.mts`, Node 26, standard library only (no third-party action or package).
-- Model: repository variable `GEMINI_MODEL`, default `gemini-pro-latest`. If the model does not exist, the job fails
-  and lists the available models.
+- Model: repository variable `GEMINI_MODEL`, default `gemini-pro-latest`; optional `GEMINI_FALLBACK_MODEL`. If a model
+  does not exist, the job fails and lists the available models.
+- Overload (HTTP 429/5xx): up to 5 attempts per model with back-off (Retry-After honoured), then the fallback model.
+  If all are unavailable, the job ends with a warning (not a failure) and a short note in the PR comment; an existing
+  review is not overwritten. Configuration errors (invalid key, unknown model) fail the job.
 - Secret: `GEMINI_API_KEY` (repository secret). Sent in the `x-goog-api-key` header, never in the URL. Without the
   secret, the job skips with a notice.
 - Scope: pull requests from this repository only; forks and Dependabot are skipped (no secrets available there).
