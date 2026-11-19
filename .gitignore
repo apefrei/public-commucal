@@ -1,0 +1,41 @@
+# Umgebungsvariablen
+.env
+.env.*
+!.env.example
+
+# Persönliche Claude Code Einstellungen
+.claude/settings.local.json
+
+# Node
+node_modules/
+dist/
+build/
+coverage/
+.vite/
+
+# Framework-Build-Output
+.next/
+out/
+.nuxt/
+.output/
+.svelte-kit/
+.astro/
+.angular/
+.vercel/
+.turbo/
+
+# PHP
+vendor/
+
+# Docker
+docker-compose.override.yml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
