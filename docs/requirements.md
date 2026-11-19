@@ -2,6 +2,7 @@
 
 - **Product:** CommuCal – public community calendars for municipalities and associations
 - **Domain:** commucal.ch
+- **Licence:** MIT
 - **Owner:** Lauro Frei (@apefrei)
 - **Status:** Draft for review
 - **Version:** 2.1 (2026-11-19)
@@ -460,8 +461,8 @@ Exit criteria:
 
 ## 12. Open questions
 
-- Q2: Licence for the product (the repository currently carries MIT from the playbook template).
 - Q4: Annual prices per plan and whether associations pay differently from municipalities (needed for M4).
 - Q5: Operator details for invoices: legal entity, address, IBAN or QR-IBAN, VAT status (needed for M4).
 
-Resolved: Q1 name and domain → CommuCal, commucal.ch. Q3 Resend region → Ireland (`eu-west-1`).
+Resolved: Q1 name and domain → CommuCal, commucal.ch. Q2 licence → MIT (open source, permissive).
+Q3 Resend region → Ireland (`eu-west-1`).
