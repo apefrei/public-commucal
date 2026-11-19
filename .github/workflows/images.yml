@@ -25,7 +25,13 @@ jobs:
         with:
           persist-credentials: false
       - name: Create .env for the test stack
-        run: printf 'POSTGRES_PASSWORD=%s\nCOMMUCAL_HOST=localhost\n' "$(openssl rand -hex 24)" > .env
+        run: |
+          {
+            for name in POSTGRES_PASSWORD DB_APP_PASSWORD DB_WORKER_PASSWORD DB_MCP_PASSWORD; do
+              echo "$name=$(openssl rand -hex 24)"
+            done
+            echo "COMMUCAL_HOST=localhost"
+          } > .env
       - name: Build all images
         run: docker compose --profile local build
       - name: Start the stack and wait until healthy
@@ -60,6 +66,19 @@ jobs:
           docker compose exec -T postgres sh -c 'command -v wget' >/dev/null
           if docker compose exec -T postgres wget -q -T 3 -O /dev/null http://example.com 2>/dev/null; then
             echo "postgres can reach the internet" && exit 1
+          fi
+      - name: Check database roles
+        run: |
+          set -eu
+          set -a; . ./.env; set +a
+          [ "$(docker compose ps -a migrate --format '{{.ExitCode}}')" = "0" ]
+          as_mcp() {
+            docker compose exec -T -e PGPASSWORD="$DB_MCP_PASSWORD" postgres \
+              psql -h 127.0.0.1 -U commucal_mcp -d commucal -tAc "$1"
+          }
+          as_mcp "select count(*) from public_calendar"
+          if as_mcp "select count(*) from calendar" 2>/dev/null; then
+            echo "commucal_mcp can read a base table" && exit 1
           fi
       - name: Logs on failure
         if: failure()

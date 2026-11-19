@@ -29,6 +29,30 @@ docker compose -f compose.yaml -f compose.dev.yaml --profile local up --watch
 docker compose --profile test run --rm test   # Biome, typecheck, unit tests (same as CI)
 ```
 
+## Database and migrations
+
+Design: [ADR-0004](adr/0004-data-layer-drizzle-rls-append-only-audit.md). Schema in `packages/db/src/schema`,
+migrations in `packages/db/drizzle` (one folder per migration).
+
+- Change the schema, then generate a migration: `pnpm --filter @commucal/db db:generate --name <name>`
+- Roles, functions, grants and triggers are not managed by drizzle-kit: create an empty migration with
+  `pnpm --filter @commucal/db db:custom --name <name>` and write the SQL by hand.
+- Grant every new table to the runtime roles in a custom migration and add it to the isolation tests.
+- The `migrate` container applies all migrations before `web`, `mcp` and `worker` start and sets the runtime
+  role passwords from `.env`.
+- Every database access to tenant data runs inside `withTenant(db, { tenantId }, (tx) => …)`; outside it,
+  row-level security returns no rows.
+
+| Role | Used by | Can do |
+|---|---|---|
+| `commucal_owner` | `migrate`, tests | everything (superuser); never used by the running apps |
+| `commucal_app` | `web` | read/write tenant tables of the current tenant (RLS), read public views |
+| `commucal_worker` | `worker` | like `commucal_app` |
+| `commucal_mcp` | `mcp` | read the `public_*` views only |
+
+Integration tests (`packages/db`) create a throw-away database per run; they need `TEST_DATABASE_URL`
+(set by the Compose profile `test` and in CI).
+
 ## Production-like stack (staging)
 
 ```bash

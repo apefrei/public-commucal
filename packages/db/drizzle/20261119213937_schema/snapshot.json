@@ -1,0 +1,1562 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "7837c5bc-3ac9-46a1-ad08-862ab735e183",
+  "prevIds": ["a49fd8db-4331-4a56-b2c4-1995e810c0ef"],
+  "footprints": [
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "calendar"],
+      "writes": [
+        "s|tbl|public.calendar",
+        "n|tbl|public.calendar",
+        "e|tbl|public.calendar",
+        "n|rel|public.calendar",
+        "n|type|public.calendar",
+        "n|rel|public.calendar_pkey",
+        "n|rel|public.calendar_tenant_slug_unique",
+        "n|rel|public.calendar_id_tenant_unique"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "event"],
+      "writes": [
+        "s|tbl|public.event",
+        "n|tbl|public.event",
+        "e|tbl|public.event",
+        "n|rel|public.event",
+        "n|type|public.event",
+        "n|rel|public.event_pkey",
+        "n|rel|public.event_id_tenant_unique"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "event_translation"],
+      "writes": [
+        "s|tbl|public.event_translation",
+        "n|tbl|public.event_translation",
+        "e|tbl|public.event_translation",
+        "n|rel|public.event_translation",
+        "n|type|public.event_translation",
+        "n|rel|public.event_translation_pk"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "tenant"],
+      "writes": [
+        "s|tbl|public.tenant",
+        "n|tbl|public.tenant",
+        "e|tbl|public.tenant",
+        "n|rel|public.tenant",
+        "n|type|public.tenant",
+        "n|rel|public.tenant_pkey",
+        "n|rel|public.tenant_slug_key"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "event", "event_calendar_starts_at_idx"],
+      "writes": [
+        "s|idx|public.event_calendar_starts_at_idx",
+        "n|idx|public.event_calendar_starts_at_idx",
+        "e|idx|public.event_calendar_starts_at_idx",
+        "n|rel|public.event_calendar_starts_at_idx"
+      ],
+      "reads": [
+        "n|tbl|public.event",
+        "n|sch|public",
+        "n|col|public.event.calendar_id",
+        "n|col|public.event.starts_at"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "event", "event_calendar_start_date_idx"],
+      "writes": [
+        "s|idx|public.event_calendar_start_date_idx",
+        "n|idx|public.event_calendar_start_date_idx",
+        "e|idx|public.event_calendar_start_date_idx",
+        "n|rel|public.event_calendar_start_date_idx"
+      ],
+      "reads": [
+        "n|tbl|public.event",
+        "n|sch|public",
+        "n|col|public.event.calendar_id",
+        "n|col|public.event.start_date"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "calendar"],
+      "writes": [
+        "s|fk|public.calendar.calendar_tenant_id_tenant_id_fkey",
+        "n|fk|public.calendar.calendar_tenant_id_tenant_id_fkey",
+        "e|fk|public.calendar.calendar_tenant_id_tenant_id_fkey",
+        "n|con|public.calendar.calendar_tenant_id_tenant_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.calendar",
+        "n|sch|public",
+        "n|tbl|public.tenant",
+        "n|sch|public",
+        "n|col|public.calendar.tenant_id",
+        "n|col|public.tenant.id",
+        "e|uniqueness|public.tenant.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "event"],
+      "writes": [
+        "s|fk|public.event.event_calendar_same_tenant_fk",
+        "n|fk|public.event.event_calendar_same_tenant_fk",
+        "e|fk|public.event.event_calendar_same_tenant_fk",
+        "n|con|public.event.event_calendar_same_tenant_fk"
+      ],
+      "reads": [
+        "n|tbl|public.event",
+        "n|sch|public",
+        "n|tbl|public.calendar",
+        "n|sch|public",
+        "n|col|public.event.calendar_id",
+        "n|col|public.event.tenant_id",
+        "n|col|public.calendar.id",
+        "n|col|public.calendar.tenant_id",
+        "e|uniqueness|public.calendar.id.tenant_id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "event_translation"],
+      "writes": [
+        "s|fk|public.event_translation.event_translation_event_same_tenant_fk",
+        "n|fk|public.event_translation.event_translation_event_same_tenant_fk",
+        "e|fk|public.event_translation.event_translation_event_same_tenant_fk",
+        "n|con|public.event_translation.event_translation_event_same_tenant_fk"
+      ],
+      "reads": [
+        "n|tbl|public.event_translation",
+        "n|sch|public",
+        "n|tbl|public.event",
+        "n|sch|public",
+        "n|col|public.event_translation.event_id",
+        "n|col|public.event_translation.tenant_id",
+        "n|col|public.event.id",
+        "n|col|public.event.tenant_id",
+        "e|uniqueness|public.event.id.tenant_id"
+      ]
+    },
+    {
+      "statementType": "create_view",
+      "statementTarget": ["view", "public", "public_calendar"],
+      "writes": [
+        "s|view|public.public_calendar",
+        "n|view|public.public_calendar",
+        "e|view|public.public_calendar",
+        "n|rel|public.public_calendar",
+        "n|type|public.public_calendar"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_view",
+      "statementTarget": ["view", "public", "public_event"],
+      "writes": [
+        "s|view|public.public_event",
+        "n|view|public.public_event",
+        "e|view|public.public_event",
+        "n|rel|public.public_event",
+        "n|type|public.public_event"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_view",
+      "statementTarget": ["view", "public", "public_event_translation"],
+      "writes": [
+        "s|view|public.public_event_translation",
+        "n|view|public.public_event_translation",
+        "e|view|public.public_event_translation",
+        "n|rel|public.public_event_translation",
+        "n|type|public.public_event_translation"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_view",
+      "statementTarget": ["view", "public", "public_tenant"],
+      "writes": [
+        "s|view|public.public_tenant",
+        "n|view|public.public_tenant",
+        "e|view|public.public_tenant",
+        "n|rel|public.public_tenant",
+        "n|type|public.public_tenant"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_policy",
+      "statementTarget": ["table", "public", "calendar"],
+      "writes": [
+        "s|pol|public.calendar.calendar_tenant_isolation",
+        "n|pol|public.calendar.calendar_tenant_isolation",
+        "e|pol|public.calendar.calendar_tenant_isolation"
+      ],
+      "reads": [
+        "n|tbl|public.calendar",
+        "n|sch|public",
+        "n|role|commucal_app",
+        "n|role|commucal_worker",
+        "e|rls|public.calendar"
+      ]
+    },
+    {
+      "statementType": "create_policy",
+      "statementTarget": ["table", "public", "event"],
+      "writes": [
+        "s|pol|public.event.event_tenant_isolation",
+        "n|pol|public.event.event_tenant_isolation",
+        "e|pol|public.event.event_tenant_isolation"
+      ],
+      "reads": [
+        "n|tbl|public.event",
+        "n|sch|public",
+        "n|role|commucal_app",
+        "n|role|commucal_worker",
+        "e|rls|public.event"
+      ]
+    },
+    {
+      "statementType": "create_policy",
+      "statementTarget": ["table", "public", "event_translation"],
+      "writes": [
+        "s|pol|public.event_translation.event_translation_tenant_isolation",
+        "n|pol|public.event_translation.event_translation_tenant_isolation",
+        "e|pol|public.event_translation.event_translation_tenant_isolation"
+      ],
+      "reads": [
+        "n|tbl|public.event_translation",
+        "n|sch|public",
+        "n|role|commucal_app",
+        "n|role|commucal_worker",
+        "e|rls|public.event_translation"
+      ]
+    },
+    {
+      "statementType": "create_policy",
+      "statementTarget": ["table", "public", "tenant"],
+      "writes": [
+        "s|pol|public.tenant.tenant_isolation",
+        "n|pol|public.tenant.tenant_isolation",
+        "e|pol|public.tenant.tenant_isolation"
+      ],
+      "reads": [
+        "n|tbl|public.tenant",
+        "n|sch|public",
+        "n|role|commucal_app",
+        "n|role|commucal_worker",
+        "e|rls|public.tenant"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "calendar",
+        "isRlsEnabled": true,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "event",
+        "isRlsEnabled": true,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "event_translation",
+        "isRlsEnabled": true,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "tenant",
+        "isRlsEnabled": true,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "calendar",
+        "name": "id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "uuidv7()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "calendar",
+        "name": "tenant_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "calendar",
+        "name": "slug",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "calendar",
+        "name": "name",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "calendar",
+        "name": "description",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "calendar",
+        "name": "color",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "calendar",
+        "name": "is_public",
+        "type": "boolean",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "false",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "calendar",
+        "name": "sort_order",
+        "type": "integer",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "0",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "calendar",
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "calendar",
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "calendar",
+        "name": "deleted_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event",
+        "name": "id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "uuidv7()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event",
+        "name": "tenant_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event",
+        "name": "calendar_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event",
+        "name": "title",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event",
+        "name": "description",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event",
+        "name": "location",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event",
+        "name": "url",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event",
+        "name": "all_day",
+        "type": "boolean",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "false",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event",
+        "name": "starts_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event",
+        "name": "ends_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event",
+        "name": "start_date",
+        "type": "date",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event",
+        "name": "end_date",
+        "type": "date",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event",
+        "name": "time_zone",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "'Europe/Zurich'",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event",
+        "name": "rrule",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event",
+        "name": "exdates",
+        "type": "date",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 1,
+        "default": "'{}'",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event",
+        "name": "status",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "'confirmed'",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event",
+        "name": "sequence",
+        "type": "integer",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "0",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event",
+        "name": "created_by",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event",
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event",
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event",
+        "name": "deleted_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event_translation",
+        "name": "event_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event_translation",
+        "name": "tenant_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event_translation",
+        "name": "locale",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event_translation",
+        "name": "title",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event_translation",
+        "name": "description",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event_translation",
+        "name": "location",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event_translation",
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "tenant",
+        "name": "id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "uuidv7()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "tenant",
+        "name": "slug",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "tenant",
+        "name": "name",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "tenant",
+        "name": "status",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "'active'",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "tenant",
+        "name": "default_language",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "'de'",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "tenant",
+        "name": "enabled_languages",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 1,
+        "default": "'{de}'",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "tenant",
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "tenant",
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event",
+        "name": "event_calendar_starts_at_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "calendar_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "starts_at",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event",
+        "name": "event_calendar_start_date_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "calendar_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "start_date",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "calendar",
+        "name": "calendar_tenant_id_tenant_id_fkey",
+        "nameExplicit": false,
+        "columns": ["tenant_id"],
+        "schemaTo": "public",
+        "tableTo": "tenant",
+        "columnsTo": ["id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event",
+        "name": "event_calendar_same_tenant_fk",
+        "nameExplicit": true,
+        "columns": ["calendar_id", "tenant_id"],
+        "schemaTo": "public",
+        "tableTo": "calendar",
+        "columnsTo": ["id", "tenant_id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event_translation",
+        "name": "event_translation_event_same_tenant_fk",
+        "nameExplicit": true,
+        "columns": ["event_id", "tenant_id"],
+        "schemaTo": "public",
+        "tableTo": "event",
+        "columnsTo": ["id", "tenant_id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event_translation",
+        "name": "event_translation_pk",
+        "columns": ["event_id", "locale"],
+        "nameExplicit": true,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "calendar",
+        "name": "calendar_pkey",
+        "columns": ["id"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event",
+        "name": "event_pkey",
+        "columns": ["id"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "tenant",
+        "name": "tenant_pkey",
+        "columns": ["id"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "calendar",
+        "name": "calendar_tenant_slug_unique",
+        "nameExplicit": true,
+        "columns": ["tenant_id", "slug"],
+        "nullsNotDistinct": false,
+        "entityType": "uniques"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "calendar",
+        "name": "calendar_id_tenant_unique",
+        "nameExplicit": true,
+        "columns": ["id", "tenant_id"],
+        "nullsNotDistinct": false,
+        "entityType": "uniques"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event",
+        "name": "event_id_tenant_unique",
+        "nameExplicit": true,
+        "columns": ["id", "tenant_id"],
+        "nullsNotDistinct": false,
+        "entityType": "uniques"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "tenant",
+        "name": "tenant_slug_key",
+        "nameExplicit": false,
+        "columns": ["slug"],
+        "nullsNotDistinct": false,
+        "entityType": "uniques"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "calendar",
+        "name": "calendar_slug_format_check",
+        "value": "\"slug\" ~ '^[a-z0-9]+(-[a-z0-9]+)*$'",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "calendar",
+        "name": "calendar_color_check",
+        "value": "\"color\" is null or \"color\" ~ '^#[0-9a-f]{6}$'",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event",
+        "name": "event_status_check",
+        "value": "\"status\" in ('confirmed', 'cancelled')",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event",
+        "name": "event_time_shape_check",
+        "value": "(\"all_day\" and \"start_date\" is not null and \"starts_at\" is null and \"ends_at\" is null\n        and (\"end_date\" is null or \"end_date\" >= \"start_date\"))\n      or (not \"all_day\" and \"starts_at\" is not null and \"start_date\" is null and \"end_date\" is null\n        and (\"ends_at\" is null or \"ends_at\" >= \"starts_at\"))",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event",
+        "name": "event_rrule_check",
+        "value": "\"rrule\" is null or \"rrule\" ~ '^FREQ=(DAILY|WEEKLY|MONTHLY|YEARLY)(;|$)'",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event_translation",
+        "name": "event_translation_locale_check",
+        "value": "locale in ('de', 'fr', 'it')",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "tenant",
+        "name": "tenant_status_check",
+        "value": "\"status\" in ('active', 'disabled')",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "tenant",
+        "name": "tenant_default_language_check",
+        "value": "default_language in ('de', 'fr', 'it')",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "tenant",
+        "name": "tenant_enabled_languages_check",
+        "value": "\"enabled_languages\" <@ array['de', 'fr', 'it']::text[] and \"default_language\" = any(\"enabled_languages\")",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "tenant",
+        "name": "tenant_slug_format_check",
+        "value": "\"slug\" ~ '^[a-z0-9]+(-[a-z0-9]+)*$'",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "calendar",
+        "name": "calendar_tenant_isolation",
+        "as": "PERMISSIVE",
+        "for": "ALL",
+        "roles": ["commucal_app", "commucal_worker"],
+        "using": "\"calendar\".\"tenant_id\" = commucal_current_tenant() or commucal_is_global_admin()",
+        "withCheck": "\"calendar\".\"tenant_id\" = commucal_current_tenant() or commucal_is_global_admin()",
+        "entityType": "policies"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event",
+        "name": "event_tenant_isolation",
+        "as": "PERMISSIVE",
+        "for": "ALL",
+        "roles": ["commucal_app", "commucal_worker"],
+        "using": "\"event\".\"tenant_id\" = commucal_current_tenant() or commucal_is_global_admin()",
+        "withCheck": "\"event\".\"tenant_id\" = commucal_current_tenant() or commucal_is_global_admin()",
+        "entityType": "policies"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "event_translation",
+        "name": "event_translation_tenant_isolation",
+        "as": "PERMISSIVE",
+        "for": "ALL",
+        "roles": ["commucal_app", "commucal_worker"],
+        "using": "\"event_translation\".\"tenant_id\" = commucal_current_tenant() or commucal_is_global_admin()",
+        "withCheck": "\"event_translation\".\"tenant_id\" = commucal_current_tenant() or commucal_is_global_admin()",
+        "entityType": "policies"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "tenant",
+        "name": "tenant_isolation",
+        "as": "PERMISSIVE",
+        "for": "ALL",
+        "roles": ["commucal_app", "commucal_worker"],
+        "using": "\"tenant\".\"id\" = commucal_current_tenant() or commucal_is_global_admin()",
+        "withCheck": "\"tenant\".\"id\" = commucal_current_tenant() or commucal_is_global_admin()",
+        "entityType": "policies"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "public_calendar",
+        "definition": "select \"calendar\".\"id\", \"calendar\".\"tenant_id\", \"tenant\".\"slug\" as \"tenant_slug\", \"calendar\".\"slug\", \"calendar\".\"name\", \"calendar\".\"description\", \"calendar\".\"color\", \"calendar\".\"sort_order\", \"calendar\".\"updated_at\" from \"calendar\" inner join \"tenant\" on \"tenant\".\"id\" = \"calendar\".\"tenant_id\" where ((\"tenant\".\"status\" = 'active') and (\"calendar\".\"is_public\" = true) and ((\"calendar\".\"deleted_at\" is null)))",
+        "with": {
+          "checkOption": null,
+          "securityBarrier": true,
+          "securityInvoker": null,
+          "autovacuumEnabled": null,
+          "autovacuumFreezeMaxAge": null,
+          "autovacuumFreezeMinAge": null,
+          "autovacuumFreezeTableAge": null,
+          "autovacuumMultixactFreezeMaxAge": null,
+          "autovacuumMultixactFreezeMinAge": null,
+          "autovacuumMultixactFreezeTableAge": null,
+          "autovacuumVacuumCostDelay": null,
+          "autovacuumVacuumCostLimit": null,
+          "autovacuumVacuumScaleFactor": null,
+          "autovacuumVacuumThreshold": null,
+          "fillfactor": null,
+          "logAutovacuumMinDuration": null,
+          "parallelWorkers": null,
+          "toastTupleTarget": null,
+          "userCatalogTable": null,
+          "vacuumIndexCleanup": null,
+          "vacuumTruncate": null
+        },
+        "withNoData": null,
+        "using": null,
+        "tablespace": null,
+        "materialized": false,
+        "entityType": "views"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "public_event",
+        "definition": "select \"event\".\"id\", \"event\".\"tenant_id\", \"event\".\"calendar_id\", \"event\".\"title\", \"event\".\"description\", \"event\".\"location\", \"event\".\"url\", \"event\".\"all_day\", \"event\".\"starts_at\", \"event\".\"ends_at\", \"event\".\"start_date\", \"event\".\"end_date\", \"event\".\"time_zone\", \"event\".\"rrule\", \"event\".\"exdates\", \"event\".\"status\", \"event\".\"sequence\", \"event\".\"updated_at\" from \"event\" inner join \"calendar\" on \"calendar\".\"id\" = \"event\".\"calendar_id\" inner join \"tenant\" on \"tenant\".\"id\" = \"event\".\"tenant_id\" where ((\"tenant\".\"status\" = 'active') and (\"calendar\".\"is_public\" = true) and ((\"calendar\".\"deleted_at\" is null)) and ((\"event\".\"deleted_at\" is null)))",
+        "with": {
+          "checkOption": null,
+          "securityBarrier": true,
+          "securityInvoker": null,
+          "autovacuumEnabled": null,
+          "autovacuumFreezeMaxAge": null,
+          "autovacuumFreezeMinAge": null,
+          "autovacuumFreezeTableAge": null,
+          "autovacuumMultixactFreezeMaxAge": null,
+          "autovacuumMultixactFreezeMinAge": null,
+          "autovacuumMultixactFreezeTableAge": null,
+          "autovacuumVacuumCostDelay": null,
+          "autovacuumVacuumCostLimit": null,
+          "autovacuumVacuumScaleFactor": null,
+          "autovacuumVacuumThreshold": null,
+          "fillfactor": null,
+          "logAutovacuumMinDuration": null,
+          "parallelWorkers": null,
+          "toastTupleTarget": null,
+          "userCatalogTable": null,
+          "vacuumIndexCleanup": null,
+          "vacuumTruncate": null
+        },
+        "withNoData": null,
+        "using": null,
+        "tablespace": null,
+        "materialized": false,
+        "entityType": "views"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "public_event_translation",
+        "definition": "select \"event_translation\".\"event_id\", \"event_translation\".\"locale\", \"event_translation\".\"title\", \"event_translation\".\"description\", \"event_translation\".\"location\" from \"event_translation\" inner join \"event\" on \"event\".\"id\" = \"event_translation\".\"event_id\" inner join \"calendar\" on \"calendar\".\"id\" = \"event\".\"calendar_id\" inner join \"tenant\" on \"tenant\".\"id\" = \"event\".\"tenant_id\" where ((\"tenant\".\"status\" = 'active') and (\"calendar\".\"is_public\" = true) and ((\"calendar\".\"deleted_at\" is null)) and ((\"event\".\"deleted_at\" is null)))",
+        "with": {
+          "checkOption": null,
+          "securityBarrier": true,
+          "securityInvoker": null,
+          "autovacuumEnabled": null,
+          "autovacuumFreezeMaxAge": null,
+          "autovacuumFreezeMinAge": null,
+          "autovacuumFreezeTableAge": null,
+          "autovacuumMultixactFreezeMaxAge": null,
+          "autovacuumMultixactFreezeMinAge": null,
+          "autovacuumMultixactFreezeTableAge": null,
+          "autovacuumVacuumCostDelay": null,
+          "autovacuumVacuumCostLimit": null,
+          "autovacuumVacuumScaleFactor": null,
+          "autovacuumVacuumThreshold": null,
+          "fillfactor": null,
+          "logAutovacuumMinDuration": null,
+          "parallelWorkers": null,
+          "toastTupleTarget": null,
+          "userCatalogTable": null,
+          "vacuumIndexCleanup": null,
+          "vacuumTruncate": null
+        },
+        "withNoData": null,
+        "using": null,
+        "tablespace": null,
+        "materialized": false,
+        "entityType": "views"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "public_tenant",
+        "definition": "select \"id\", \"slug\", \"name\", \"default_language\", \"enabled_languages\" from \"tenant\" where \"tenant\".\"status\" = 'active'",
+        "with": {
+          "checkOption": null,
+          "securityBarrier": true,
+          "securityInvoker": null,
+          "autovacuumEnabled": null,
+          "autovacuumFreezeMaxAge": null,
+          "autovacuumFreezeMinAge": null,
+          "autovacuumFreezeTableAge": null,
+          "autovacuumMultixactFreezeMaxAge": null,
+          "autovacuumMultixactFreezeMinAge": null,
+          "autovacuumMultixactFreezeTableAge": null,
+          "autovacuumVacuumCostDelay": null,
+          "autovacuumVacuumCostLimit": null,
+          "autovacuumVacuumScaleFactor": null,
+          "autovacuumVacuumThreshold": null,
+          "fillfactor": null,
+          "logAutovacuumMinDuration": null,
+          "parallelWorkers": null,
+          "toastTupleTarget": null,
+          "userCatalogTable": null,
+          "vacuumIndexCleanup": null,
+          "vacuumTruncate": null
+        },
+        "withNoData": null,
+        "using": null,
+        "tablespace": null,
+        "materialized": false,
+        "entityType": "views"
+      }
+    }
+  ]
+}
