@@ -10,6 +10,7 @@ import {
   EXCLUDED_PATHS,
   errorMessage,
   extractText,
+  fitCommentLimit,
   type GeminiResponse,
   generateReview,
   NoAnswerError,
@@ -166,6 +167,13 @@ describe("generateReview", () => {
     assert.equal(calls, 2);
   });
 
+  it("retries when a 200 response has a broken JSON body", async () => {
+    const responses = [new Response('{"candidates": [', { status: 200 }), json(200, OK_BODY)];
+    mock.method(globalThis, "fetch", async () => responses.shift());
+    const { opts } = options();
+    assert.deepEqual(await generateReview(opts), OK_BODY);
+  });
+
   it("gives up with ServiceUnavailableError after the maximum attempts", async () => {
     const fetchMock = mock.method(globalThis, "fetch", async () =>
       json(503, { error: { status: "UNAVAILABLE", message: "busy" } }),
@@ -273,5 +281,18 @@ describe("withNotice", () => {
     assert.doesNotMatch(twice, /abc/);
     assert.equal(twice.match(/<!-- commucal:notice -->/g)?.length, 1);
     assert.match(twice, /\*\*Verdict:\*\* fine/);
+  });
+});
+
+describe("fitCommentLimit", () => {
+  it("keeps short bodies unchanged", () => {
+    assert.equal(fitCommentLimit("short", 100), "short");
+  });
+
+  it("shortens long bodies to the limit and says so", () => {
+    const body = fitCommentLimit(`<!-- marker -->${"x".repeat(500)}`, 200);
+    assert.equal(body.length, 200);
+    assert.match(body, /^<!-- marker -->/);
+    assert.match(body, /Shortened to fit GitHub's comment size limit/);
   });
 });

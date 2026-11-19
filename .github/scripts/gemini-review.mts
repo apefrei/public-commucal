@@ -19,6 +19,10 @@ const SIDE_REQUEST_TIMEOUT_MS = 30_000;
 // Stay below the workflow's timeout-minutes (15) so overloads end as a warning, not a killed job.
 const TIME_BUDGET_MS = 12 * 60_000;
 const MIN_REQUEST_TIME_MS = 30_000;
+// Share of the time budget the primary model may use when a fallback model is configured.
+const PRIMARY_BUDGET_SHARE = 0.6;
+// GitHub rejects issue comments longer than 65,536 characters.
+const MAX_COMMENT_CHARS = 65_000;
 
 // Files that add noise but no reviewable logic. "glob" makes "**/" also match the repository root.
 export const EXCLUDED_PATHS = [
@@ -32,6 +36,7 @@ export const EXCLUDED_PATHS = [
 const RULE_FILES = [
   "CLAUDE.md",
   ".claude/rules/security.md",
+  ".claude/rules/accessibility.md",
   ".claude/rules/policies.md",
   ".claude/rules/code-quality.md",
   ".claude/rules/dev-stack.md",
@@ -211,8 +216,12 @@ export async function generateReview(options: GenerateOptions): Promise<GeminiRe
         body,
         signal: AbortSignal.timeout(Math.min(REQUEST_TIMEOUT_MS, remaining)),
       });
-      // Read the body inside the try: the timeout also covers the body, and a reset while reading is transient.
+      // Read and parse inside the try: the timeout also covers the body, and a reset or a truncated
+      // body is transient.
       responseText = await res.text();
+      if (res.ok) {
+        return JSON.parse(responseText) as GeminiResponse;
+      }
     } catch (error) {
       // Timeouts and network errors are transient from our point of view.
       res = undefined;
@@ -220,9 +229,6 @@ export async function generateReview(options: GenerateOptions): Promise<GeminiRe
     }
 
     if (res) {
-      if (res.ok) {
-        return JSON.parse(responseText) as GeminiResponse;
-      }
       const detail = errorMessage(responseText);
       if (res.status === 404) {
         const models = await listModels(apiKey);
@@ -314,7 +320,7 @@ async function upsertComment(
       break;
     }
   }
-  const body = buildBody(existing?.body);
+  const body = fitCommentLimit(buildBody(existing?.body));
   if (existing) {
     await github(`/repos/${repo}/issues/comments/${existing.id}`, {
       method: "PATCH",
@@ -326,6 +332,15 @@ async function upsertComment(
       body: JSON.stringify({ body }),
     });
   }
+}
+
+/** Shortens a comment body to GitHub's size limit, keeping the start (marker, heading, verdict). */
+export function fitCommentLimit(body: string, limit = MAX_COMMENT_CHARS): string {
+  if (body.length <= limit) {
+    return body;
+  }
+  const note = "\n\n…_(Shortened to fit GitHub's comment size limit.)_";
+  return `${body.slice(0, limit - note.length)}${note}`;
 }
 
 /**
@@ -394,9 +409,18 @@ async function main(): Promise<void> {
   let model = "";
   let response: GeminiResponse | undefined;
   const unavailable: string[] = [];
-  for (const candidate of models) {
+  const start = Date.now();
+  for (const [index, candidate] of models.entries()) {
+    // With a fallback, the primary model may not use the whole budget, so the fallback still gets a chance.
+    const isLast = index === models.length - 1;
+    const modelDeadline = isLast ? deadline : start + (deadline - start) * PRIMARY_BUDGET_SHARE;
     try {
-      response = await generateReview({ apiKey, model: candidate, prompt, deadline });
+      response = await generateReview({
+        apiKey,
+        model: candidate,
+        prompt,
+        deadline: modelDeadline,
+      });
       model = candidate;
       break;
     } catch (error) {
