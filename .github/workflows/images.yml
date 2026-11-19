@@ -1,0 +1,111 @@
+name: Images
+
+# Builds the container images (ADR-0002). On pull requests: build and smoke-test the Compose stack.
+# On main: additionally push web, mcp and worker to GHCR with SBOM and provenance attestations.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: images-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Build all images
+        run: docker compose --profile local build
+      - name: Start the stack and wait until healthy
+        run: |
+          printf 'POSTGRES_PASSWORD=%s\nCOMMUCAL_HOST=localhost\n' "$(openssl rand -hex 24)" > .env
+          docker compose --profile local up -d --wait --wait-timeout 180
+      - name: Check endpoints
+        run: |
+          set -eu
+          check() { # url expected-status
+            status=$(curl -sk -o /dev/null -w '%{http_code}' "$1")
+            echo "$1 -> $status"
+            [ "$status" = "$2" ]
+          }
+          check http://127.0.0.1:3000/healthz 200
+          check http://127.0.0.1:3001/healthz 200
+          check https://localhost:8443/ 200
+          check https://localhost:8443/healthz 200
+          # Routed to mcp (no MCP endpoint yet, so 404 without a Next.js page)
+          check https://localhost:8443/mcp 404
+          check https://localhost:8443/t/example/mcp 404
+      - name: Check container hardening
+        run: |
+          set -eu
+          for service in web mcp worker; do
+            uid=$(docker compose exec -T "$service" id -u)
+            echo "$service uid=$uid"
+            [ "$uid" != "0" ]
+            if docker compose exec -T "$service" touch /probe 2>/dev/null; then
+              echo "$service root filesystem is writable" && exit 1
+            fi
+          done
+          if docker compose exec -T postgres wget -q -T 3 -O /dev/null http://example.com 2>/dev/null; then
+            echo "postgres can reach the internet" && exit 1
+          fi
+      - name: Logs on failure
+        if: failure()
+        run: docker compose --profile local logs --no-color --tail 100
+      - name: Stop the stack
+        if: always()
+        run: docker compose --profile local down -v
+
+  publish:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [web, mcp, worker]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/commucal-${{ matrix.target }}
+          tags: |
+            type=sha,format=short,prefix=sha-
+            type=raw,value=main
+          labels: |
+            org.opencontainers.image.title=commucal-${{ matrix.target }}
+            org.opencontainers.image.licenses=MIT
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: ${{ matrix.target }}
+          platforms: ${{ vars.IMAGE_PLATFORMS || 'linux/amd64' }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          sbom: true
+          provenance: mode=max
+          cache-from: type=gha,scope=${{ matrix.target }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.target }}
