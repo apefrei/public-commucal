@@ -1,0 +1,19 @@
+{
+  "name": "@commucal/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/main.ts",
+    "start": "node src/main.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@commucal/core": "workspace:*",
+    "pino": "10.4.0"
+  },
+  "devDependencies": {
+    "@commucal/config": "workspace:*"
+  }
+}
