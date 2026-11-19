@@ -1,6 +1,6 @@
 # ADR 0008: Annual invoicing with Swiss QR bill by email
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-19
 - Authors: apefrei
 

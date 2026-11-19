@@ -1,6 +1,6 @@
 # ADR 0003: Authentication with Better Auth and mandatory MFA
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-19
 - Authors: apefrei
 

@@ -1,6 +1,6 @@
 # ADR 0002: Container stack and deployment topology
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-19
 - Authors: apefrei
 

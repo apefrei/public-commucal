@@ -1,6 +1,6 @@
 # ADR 0007: Bot protection with ALTCHA and rate limiting on Valkey
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-19
 - Authors: apefrei
 
