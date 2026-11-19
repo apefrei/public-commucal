@@ -35,7 +35,15 @@ Versionen sind exakt gepinnt; neue Versionen nur über Dependabot oder einen eig
 ## Commands
 
 Alles mit pnpm aus dem Repo-Root. Auf cyberfrog ist Node nicht installiert: Commands im Container ausführen
-(bis WP-1.1 Teil 2 mit `node:26-alpine`, danach über die Compose-Profile `dev` und `test`).
+(Details: `docs/development.md`).
+
+```bash
+docker compose -f compose.yaml -f compose.dev.yaml --profile local up --watch   # Entwicklung mit Live-Sync
+docker compose --profile test run --rm test                                     # Lint, Typecheck, Tests wie in CI
+docker compose --profile local up -d --build                                    # Staging (cyberfrog), HTTPS :8443
+```
+
+Innerhalb der Container bzw. in CI:
 
 ```bash
 pnpm install --frozen-lockfile   # Abhängigkeiten

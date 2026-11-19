@@ -1,0 +1,43 @@
+# Development overlay: live sync of the source into the containers, dev servers with reload, Mailpit.
+#   docker compose -f compose.yaml -f compose.dev.yaml --profile local up --watch
+
+x-dev: &dev
+  build:
+    context: .
+    target: dev
+  image: commucal-dev:local
+  read_only: false
+  environment:
+    NODE_ENV: development
+  develop:
+    watch:
+      - action: sync
+        path: .
+        target: /app
+        ignore:
+          - "**/node_modules/"
+          - "**/.next/"
+          - "**/.turbo/"
+          - ".git/"
+      - action: rebuild
+        path: pnpm-lock.yaml
+
+services:
+  web:
+    <<: *dev
+    command: ["pnpm", "--filter", "@commucal/web", "dev", "--hostname", "0.0.0.0", "--port", "3000"]
+
+  mcp:
+    <<: *dev
+    command: ["pnpm", "--filter", "@commucal/mcp", "dev"]
+
+  worker:
+    <<: *dev
+    command: ["pnpm", "--filter", "@commucal/worker", "dev"]
+
+  mailpit:
+    image: axllent/mailpit:v1.34.0
+    ports:
+      - "${MAILPIT_BIND:-127.0.0.1}:${MAILPIT_PORT:-8025}:8025"
+    networks: [edge]
+    restart: unless-stopped

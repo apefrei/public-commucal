@@ -1,0 +1,33 @@
+# Caddy for staging (cyberfrog) and local development (ADR-0002).
+# Production uses WEDOS WAF and the host nginx instead.
+{
+	admin off
+	local_certs
+	skip_install_trust
+	# Clients that connect by IP address send no SNI; use the configured host's certificate for them.
+	default_sni {$COMMUCAL_HOST}
+	# Only TCP is published; do not advertise HTTP/3 over UDP.
+	servers {
+		protocols h1 h2
+	}
+}
+
+{$COMMUCAL_HOST} {
+	tls internal
+	encode zstd gzip
+
+	# MCP endpoints: /mcp and /t/{tenant}/mcp (ADR-0005). No buffering, so streamed responses pass through.
+	@mcp path_regexp ^(/t/[^/]+)?/mcp(/.*)?$
+	handle @mcp {
+		reverse_proxy mcp:3001 {
+			flush_interval -1
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	handle {
+		reverse_proxy web:3000 {
+			header_up X-Real-IP {remote_host}
+		}
+	}
+}

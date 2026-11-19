@@ -1,0 +1,8 @@
+// Liveness endpoint for Compose health checks and the proxies (NFR-10).
+export const dynamic = "force-dynamic";
+
+export function GET(): Response {
+  return new Response("ok", {
+    headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
+  });
+}
