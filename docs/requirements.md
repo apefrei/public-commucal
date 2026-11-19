@@ -4,7 +4,7 @@
 - **Domain:** commucal.ch
 - **Licence:** MIT
 - **Owner:** Lauro Frei (@apefrei)
-- **Status:** Draft for review
+- **Status:** Accepted (baseline for M1)
 - **Version:** 2.1 (2026-11-19)
 - **Supersedes:** PRD v1.1 (2026-04-05) and the Task Master plan in `apefrei/testing-community-public-calendar`
 

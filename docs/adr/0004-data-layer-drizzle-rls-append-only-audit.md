@@ -1,6 +1,6 @@
 # ADR 0004: Data layer – Drizzle, row-level security and append-only audit log
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-19
 - Authors: apefrei
 

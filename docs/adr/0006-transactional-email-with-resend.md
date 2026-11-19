@@ -1,6 +1,6 @@
 # ADR 0006: Transactional email with Resend
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-19
 - Authors: apefrei
 

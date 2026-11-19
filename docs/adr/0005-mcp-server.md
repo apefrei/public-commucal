@@ -1,6 +1,6 @@
 # ADR 0005: Public read-only MCP server
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-19
 - Authors: apefrei
 
