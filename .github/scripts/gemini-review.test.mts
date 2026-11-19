@@ -15,6 +15,7 @@ import {
   generateReview,
   oneLine,
   ServiceUnavailableError,
+  withNotice,
 } from "./gemini-review.mts";
 
 const OK_BODY: GeminiResponse = {
@@ -209,5 +210,33 @@ describe("EXCLUDED_PATHS", () => {
       .trim()
       .split("\n");
     assert.deepEqual(listed.sort(), ["README.md", "apps/web/src/page.tsx"]);
+  });
+});
+
+describe("withNotice", () => {
+  const review = [
+    "<!-- commucal:gemini-review -->",
+    "## 🤖 Gemini second-opinion review",
+    "**Verdict:** fine",
+  ].join("\n\n");
+
+  it("creates a comment with only the notice when there is no review yet", () => {
+    const body = withNotice(undefined, "Commit `abc` was not reviewed");
+    assert.match(body, /^<!-- commucal:gemini-review -->/);
+    assert.match(body, /> ⚠️ Commit `abc` was not reviewed/);
+  });
+
+  it("puts the notice above an existing review and keeps the review", () => {
+    const body = withNotice(review, "Commit `abc` was not reviewed");
+    assert.ok(body.indexOf("⚠️ Commit `abc`") < body.indexOf("**Verdict:** fine"));
+    assert.match(body, /\*\*Verdict:\*\* fine/);
+  });
+
+  it("replaces an earlier notice instead of stacking notices", () => {
+    const once = withNotice(review, "Commit `abc` was not reviewed");
+    const twice = withNotice(once, "Commit `def` was not reviewed");
+    assert.doesNotMatch(twice, /abc/);
+    assert.equal(twice.match(/<!-- commucal:notice -->/g)?.length, 1);
+    assert.match(twice, /\*\*Verdict:\*\* fine/);
   });
 });

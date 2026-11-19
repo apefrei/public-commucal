@@ -6,6 +6,9 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 const MARKER = "<!-- commucal:gemini-review -->";
+const HEADING = "## 🤖 Gemini second-opinion review";
+const NOTICE_START = "<!-- commucal:notice -->";
+const NOTICE_END = "<!-- /commucal:notice -->";
 const DEFAULT_MODEL = "gemini-pro-latest";
 const MAX_DIFF_CHARS = 400_000;
 const MAX_OUTPUT_TOKENS = 65_536;
@@ -282,11 +285,11 @@ async function github(path: string, init: RequestInit = {}): Promise<Response> {
   return res;
 }
 
+/** Creates the PR's review comment or replaces it with the body built from the existing one. */
 async function upsertComment(
   repo: string,
   prNumber: string,
-  body: string,
-  { keepExisting = false }: { keepExisting?: boolean } = {},
+  buildBody: (existingBody: string | undefined) => string,
 ): Promise<void> {
   let existing: IssueComment | undefined;
   for (let page = 1; !existing; page++) {
@@ -301,9 +304,7 @@ async function upsertComment(
       break;
     }
   }
-  if (existing && keepExisting) {
-    return;
-  }
+  const body = buildBody(existing?.body);
   if (existing) {
     await github(`/repos/${repo}/issues/comments/${existing.id}`, {
       method: "PATCH",
@@ -317,10 +318,29 @@ async function upsertComment(
   }
 }
 
+/**
+ * Puts a warning at the top of the review comment. An earlier review stays below it, so the PR shows both the
+ * last available review and the fact that the newest commit was not reviewed. A later review replaces everything.
+ */
+export function withNotice(existingBody: string | undefined, text: string): string {
+  const block = `${NOTICE_START}\n> ⚠️ ${text}\n${NOTICE_END}`;
+  if (!existingBody?.includes(MARKER)) {
+    return [MARKER, HEADING, block].join("\n\n");
+  }
+  const withoutOld = existingBody.replace(
+    new RegExp(`${NOTICE_START}[\\s\\S]*?${NOTICE_END}\\n*`, "g"),
+    "",
+  );
+  const at = withoutOld.indexOf(HEADING);
+  if (at === -1) {
+    return withoutOld.replace(MARKER, `${MARKER}\n\n${block}`);
+  }
+  const afterHeading = at + HEADING.length;
+  return `${withoutOld.slice(0, afterHeading)}\n\n${block}\n\n${withoutOld.slice(afterHeading).trimStart()}`;
+}
+
 async function postNotice(repo: string, prNumber: string, text: string): Promise<void> {
-  // A notice never replaces an earlier review; it only appears if there is no review yet.
-  const body = [MARKER, "## 🤖 Gemini second-opinion review", text].join("\n\n");
-  await upsertComment(repo, prNumber, body, { keepExisting: true });
+  await upsertComment(repo, prNumber, (existing) => withNotice(existing, text));
 }
 
 async function main(): Promise<void> {
@@ -382,7 +402,7 @@ async function main(): Promise<void> {
     await postNotice(
       repo,
       prNumber,
-      `Not available for commit \`${shortSha}\`: Gemini was overloaded (${models.join(", ")}). Re-run the workflow or push again.`,
+      `Commit \`${shortSha}\` was not reviewed: Gemini was overloaded (${models.join(", ")}). Re-run the workflow or push again.`,
     );
     return;
   }
@@ -399,7 +419,7 @@ async function main(): Promise<void> {
     await postNotice(
       repo,
       prNumber,
-      `Not available for commit \`${shortSha}\`: ${error.message}. Review this change manually.`,
+      `Commit \`${shortSha}\` was not reviewed: ${error.message}. Review this change manually.`,
     );
     return;
   }
@@ -416,13 +436,13 @@ async function main(): Promise<void> {
 
   const body = [
     MARKER,
-    "## 🤖 Gemini second-opinion review",
+    HEADING,
     review,
     "---",
     `<sub>${footer.join(" · ")}. Advisory only; not a required check. Lock files are excluded.</sub>`,
   ].join("\n\n");
 
-  await upsertComment(repo, prNumber, body);
+  await upsertComment(repo, prNumber, () => body);
   log(`Review posted for PR #${prNumber} (${model}).`);
 }
 
