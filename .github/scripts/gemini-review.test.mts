@@ -13,6 +13,7 @@ import {
   fitCommentLimit,
   type GeminiResponse,
   generateReview,
+  isNonCodeChange,
   NoAnswerError,
   oneLine,
   ServiceUnavailableError,
@@ -294,5 +295,23 @@ describe("fitCommentLimit", () => {
     assert.equal(body.length, 200);
     assert.match(body, /^<!-- marker -->/);
     assert.match(body, /Shortened to fit GitHub's comment size limit/);
+  });
+});
+
+describe("isNonCodeChange", () => {
+  it("is true for documentation-only changes", () => {
+    assert.equal(
+      isNonCodeChange(["docs/requirements.md", "README.md", ".claude/rules/security.md"]),
+      true,
+    );
+  });
+
+  it("is false as soon as code or configuration changes", () => {
+    assert.equal(isNonCodeChange(["docs/adr/0011.md", "apps/web/src/page.tsx"]), false);
+    assert.equal(isNonCodeChange([".github/workflows/ci.yml"]), false);
+  });
+
+  it("is false for an empty list", () => {
+    assert.equal(isNonCodeChange([]), false);
   });
 });
