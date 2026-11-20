@@ -32,6 +32,7 @@ jobs:
             done
             echo "BETTER_AUTH_SECRET=$(openssl rand -hex 32)"
             echo "COMMUCAL_HOST=localhost"
+            echo "MAILPIT_URL=http://mailpit:8025"
           } > .env
       - name: Build all images
         run: docker compose --profile local build
@@ -88,6 +89,8 @@ jobs:
           if as_role commucal_app "$DB_APP_PASSWORD" "select count(*) from auth_account" 2>/dev/null; then
             echo "commucal_app can read credentials" && exit 1
           fi
+      - name: Check the worker's email transport
+        run: docker compose logs worker | grep -q '"emailTransport":"mailpit"'
       - name: Create a global admin with the admin image
         run: |
           set -eu

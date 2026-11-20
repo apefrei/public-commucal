@@ -128,6 +128,10 @@ services:
     tmpfs: [/tmp]
     environment:
       DATABASE_URL: postgres://commucal_worker:${DB_WORKER_PASSWORD}@postgres:5432/commucal
+      # Email (ADR-0006): Resend in production; Mailpit (profile local) for development and staging.
+      MAIL_FROM: ${MAIL_FROM:-CommuCal <noreply@commucal.ch>}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      MAILPIT_URL: ${MAILPIT_URL:-}
     networks: [edge, data]
     depends_on:
       migrate: { condition: service_completed_successfully }
@@ -149,6 +153,16 @@ services:
     depends_on:
       web: { condition: service_healthy }
       mcp: { condition: service_healthy }
+
+  # Catches all email in development and staging; web UI on MAILPIT_BIND:MAILPIT_PORT.
+  mailpit:
+    profiles: [local]
+    <<: *hardening
+    image: axllent/mailpit:v1.34.0
+    tmpfs: [/tmp]
+    ports:
+      - "${MAILPIT_BIND:-127.0.0.1}:${MAILPIT_PORT:-8025}:8025"
+    networks: [edge]
 
   # One-off admin commands (FR-8), e.g.: docker compose run --rm admin --email ops@example.ch --name "Ops"
   admin:

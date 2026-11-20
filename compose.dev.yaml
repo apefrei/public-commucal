@@ -1,4 +1,4 @@
-# Development overlay: live sync of the source into the containers, dev servers with reload, Mailpit.
+# Development overlay: live sync of the source into the containers, dev servers with reload (Mailpit: profile local).
 #   docker compose -f compose.yaml -f compose.dev.yaml --profile local up --watch
 
 x-dev: &dev
@@ -34,10 +34,3 @@ services:
   worker:
     <<: *dev
     command: ["pnpm", "--filter", "@commucal/worker", "dev"]
-
-  mailpit:
-    image: axllent/mailpit:v1.34.0
-    ports:
-      - "${MAILPIT_BIND:-127.0.0.1}:${MAILPIT_PORT:-8025}:8025"
-    networks: [edge]
-    restart: unless-stopped

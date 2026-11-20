@@ -21,3 +21,4 @@ export {
 } from "./backend-access.ts";
 export { isMfaVerifiedSession } from "./mfa.ts";
 export { type MfaResetRequest, resetMfa } from "./mfa-reset.ts";
+export { createQueueMailer } from "./queue-mailer.ts";
