@@ -16,8 +16,8 @@ export {
   type BackendUser,
   getBackendAccess,
   getTenantRole,
-  isMfaVerifiedSession,
   requireBackendUser,
   requireTenantRole,
 } from "./backend-access.ts";
+export { isMfaVerifiedSession } from "./mfa.ts";
 export { type MfaResetRequest, resetMfa } from "./mfa-reset.ts";

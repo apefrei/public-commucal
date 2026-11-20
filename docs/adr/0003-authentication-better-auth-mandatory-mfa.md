@@ -47,6 +47,9 @@ Rules:
 - **Closed paths** (HTTP 404, list in `packages/auth/src/auth.ts`): public sign-up, disabling MFA, email OTP (it
   would mark MFA as enabled without verifying a code), creating, changing, deleting and leaving tenants.
   "Trust this device" is rejected, so TOTP is required at every login.
+- **Better Auth's own endpoints** follow the same rule: a `before` hook rejects every request with a session that
+  is not MFA-verified, except login, logout, session lookup, TOTP setup and password reset. Member and invitation
+  changes in a disabled tenant are rejected by organisation hooks.
 - **Accounts** are created only through an invitation (WP-1.4 part 2) or the CLI, both server-side.
 - **Backup codes and TOTP secrets** are stored encrypted with `BETTER_AUTH_SECRET`, not hashed: Better Auth
   verifies a backup code by decrypting the stored list (`plugins/two-factor/backup-codes/index.mjs`), and hashing

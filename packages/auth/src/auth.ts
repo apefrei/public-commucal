@@ -1,10 +1,12 @@
-import type { Database } from "@commucal/db";
+import { type Database, tenant } from "@commucal/db";
 import * as schema from "@commucal/db/schema";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { APIError, createAuthMiddleware } from "better-auth/api";
+import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 import { haveIBeenPwned, organization, twoFactor } from "better-auth/plugins";
+import { eq } from "drizzle-orm";
 import { accessControl, tenantRoles } from "./access.ts";
+import { isMfaVerifiedSession } from "./mfa.ts";
 
 /** Emails Better Auth triggers. Implemented with Resend in production and Mailpit in development (ADR-0006). */
 export interface AuthMailer {
@@ -66,11 +68,41 @@ const TWO_FACTOR_VERIFY_PATHS = new Set([
   "/two-factor/verify-backup-code",
 ]);
 
+/**
+ * The only endpoints a session that is not MFA-verified may use (FR-3): finish or restart the login, set up TOTP,
+ * reset a forgotten password. Every other endpoint of Better Auth (changing the password or profile, inviting
+ * members, changing roles, …) requires an MFA-verified session, like CommuCal's own backend.
+ */
+const PATHS_WITHOUT_MFA = new Set([
+  "/sign-in/email",
+  "/sign-out",
+  "/get-session",
+  "/two-factor/enable",
+  "/two-factor/get-totp-uri",
+  "/two-factor/verify-totp",
+  "/two-factor/verify-backup-code",
+  "/request-password-reset",
+  "/reset-password",
+]);
+
+function allowedWithoutMfa(path: string): boolean {
+  return PATHS_WITHOUT_MFA.has(path) || path.startsWith("/reset-password/");
+}
+
 export function createAuth(options: CreateAuthOptions) {
   if (options.secret.length < 32) {
     throw new Error("The auth secret must be at least 32 characters long");
   }
   const baseURL = new URL(options.baseURL);
+  const assertActive = async (tenantId: string): Promise<void> => {
+    const [row] = await options.db
+      .select({ status: tenant.status })
+      .from(tenant)
+      .where(eq(tenant.id, tenantId));
+    if (row?.status !== "active") {
+      throw new APIError("FORBIDDEN", { message: "Tenant is disabled" });
+    }
+  };
 
   return betterAuth({
     appName: "CommuCal",
@@ -142,10 +174,21 @@ export function createAuth(options: CreateAuthOptions) {
     },
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
+        const path = ctx.path ?? "";
         // "Trust this device" would skip TOTP on later logins; MFA is required on every login (FR-3).
         const body = ctx.body as { trustDevice?: unknown } | undefined;
-        if (ctx.path && TWO_FACTOR_VERIFY_PATHS.has(ctx.path) && body?.trustDevice) {
+        if (TWO_FACTOR_VERIFY_PATHS.has(path) && body?.trustDevice) {
           throw new APIError("BAD_REQUEST", { message: "Trusted devices are not supported" });
+        }
+        // Requests without a session are left to the endpoint itself (most require one).
+        if (!allowedWithoutMfa(path)) {
+          const current = await getSessionFromCtx<{
+            twoFactorEnabled?: boolean | null;
+            twoFactorEnabledAt?: Date | null;
+          }>(ctx, { disableRefresh: true });
+          if (current && !isMfaVerifiedSession(current.user, current.session)) {
+            throw new APIError("FORBIDDEN", { message: "MFA setup required" });
+          }
         }
       }),
     },
@@ -162,6 +205,15 @@ export function createAuth(options: CreateAuthOptions) {
         disableOrganizationDeletion: true,
         invitationExpiresIn: INVITATION_LIFETIME_SECONDS,
         cancelPendingInvitationsOnReInvite: true,
+        // Members and invitations of a disabled tenant are frozen (FR-1).
+        organizationHooks: {
+          beforeCreateInvitation: ({ organization: t }) => assertActive(t.id),
+          beforeAcceptInvitation: ({ organization: t }) => assertActive(t.id),
+          beforeCancelInvitation: ({ organization: t }) => assertActive(t.id),
+          beforeAddMember: ({ organization: t }) => assertActive(t.id),
+          beforeRemoveMember: ({ organization: t }) => assertActive(t.id),
+          beforeUpdateMemberRole: ({ organization: t }) => assertActive(t.id),
+        },
         sendInvitationEmail: async ({ id, email, role, organization: tenant }) => {
           await options.mailer.sendInvitation({
             to: email,

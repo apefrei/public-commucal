@@ -29,6 +29,7 @@ async function insertTenant(slug: string, status = "active"): Promise<string> {
 async function createMfaUser(
   memberships: Array<[string, "admin" | "contributor"]> = [],
   globalAdmin = false,
+  withMfa = true,
 ): Promise<BackendUser & { browser: Browser }> {
   counter += 1;
   const email = `member${counter}@example.ch`;
@@ -46,6 +47,9 @@ async function createMfaUser(
   }
   const browser = new Browser(h.auth);
   await browser.post("/sign-in/email", { email, password: PASSWORD });
+  if (!withMfa) {
+    return { id: user.id, email, name: "Member", globalAdmin, browser };
+  }
   const enabled = await browser.post("/two-factor/enable", { password: PASSWORD });
   const { totpURI } = enabled.json as { totpURI: string };
   await browser.post("/two-factor/verify-totp", { code: await totpCode(totpURI) });
@@ -89,6 +93,44 @@ describe("tenant roles", () => {
   it("treats global admins as admin of every tenant", async () => {
     const admin = await createMfaUser([], true);
     expect(await getTenantRole(h.db.as("commucal_auth"), admin, tenants.b)).toBe("admin");
+  });
+});
+
+describe("invitations through Better Auth (FR-2)", () => {
+  const invite = (browser: Browser, organizationId: string, email: string) =>
+    browser.post("/organization/invite-member", { email, role: "contributor", organizationId });
+  const invitationCount = async (email: string) =>
+    (
+      await h.db.admin.query<{ n: number }>(
+        "select count(*)::int as n from tenant_invitation where email = $1",
+        [email],
+      )
+    ).rows[0]?.n;
+
+  it("lets a tenant admin with MFA invite, and sends the invitation", async () => {
+    const admin = await createMfaUser([[tenants.a, "admin"]]);
+    const response = await invite(admin.browser, tenants.a, "new-member@example.ch");
+    expect(response.status).toBe(200);
+    expect(await invitationCount("new-member@example.ch")).toBe(1);
+    expect(h.mail).toContainEqual(
+      expect.objectContaining({ kind: "invitation", to: "new-member@example.ch" }),
+    );
+  });
+
+  it("refuses a tenant admin without MFA, a contributor and an admin of a disabled tenant", async () => {
+    const withoutMfa = await createMfaUser([[tenants.a, "admin"]], false, false);
+    expect((await invite(withoutMfa.browser, tenants.a, "x1@example.ch")).status).toBe(403);
+    const contributor = await createMfaUser([[tenants.a, "contributor"]]);
+    expect((await invite(contributor.browser, tenants.a, "x2@example.ch")).status).toBe(403);
+    const disabledAdmin = await createMfaUser([[tenants.disabled, "admin"]]);
+    expect((await invite(disabledAdmin.browser, tenants.disabled, "x3@example.ch")).status).toBe(
+      403,
+    );
+    const otherAdmin = await createMfaUser([[tenants.b, "admin"]]);
+    expect((await invite(otherAdmin.browser, tenants.a, "x4@example.ch")).status).not.toBe(200);
+    for (const email of ["x1@example.ch", "x2@example.ch", "x3@example.ch", "x4@example.ch"]) {
+      expect(await invitationCount(email), email).toBe(0);
+    }
   });
 });
 

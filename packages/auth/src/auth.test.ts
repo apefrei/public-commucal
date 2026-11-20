@@ -76,7 +76,9 @@ describe("accounts", () => {
   it("does not let a user make themselves global admin", async () => {
     const user = await createUser();
     const browser = await signIn(user.email);
-    await browser.post("/update-user", { globalAdmin: true, name: "Still Test" });
+    await setUpMfa(browser);
+    const response = await browser.post("/update-user", { globalAdmin: true, name: "Still Test" });
+    expect(response.status).not.toBe(200);
     const result = await h.db.admin.query("select global_admin from app_user where id = $1", [
       user.id,
     ]);
@@ -207,6 +209,34 @@ describe("mandatory MFA (FR-3)", () => {
     });
     expect(response.status).toBe(400);
     expect((await accessOf(browser)).kind).toBe("signed_out");
+  });
+});
+
+describe("Better Auth endpoints without MFA (FR-3)", () => {
+  it("allows only the login and MFA setup endpoints", async () => {
+    const browser = await signIn((await createUser()).email);
+    expect((await browser.post("/update-user", { name: "Changed" })).status).toBe(403);
+    expect(
+      (
+        await browser.post("/change-password", {
+          currentPassword: PASSWORD,
+          newPassword: "a different passphrase",
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (await browser.post("/two-factor/generate-backup-codes", { password: PASSWORD })).status,
+    ).toBe(403);
+    const session = await h.auth.handler(
+      new Request("http://localhost:3000/api/auth/get-session", { headers: browser.headers() }),
+    );
+    expect(session.status).toBe(200);
+  });
+
+  it("allows the same endpoints once MFA is set up", async () => {
+    const browser = await signIn((await createUser()).email);
+    await setUpMfa(browser);
+    expect((await browser.post("/update-user", { name: "Changed" })).status).toBe(200);
   });
 });
 
