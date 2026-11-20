@@ -130,6 +130,8 @@ export function createAuth(options: CreateAuthOptions) {
       // Ids are uuidv7() defaults of the database.
       database: { generateId: "uuid" },
       cookiePrefix: "commucal",
+      // Set by the trusted proxy (Caddy, nginx; ADR-0002), which replaces any value sent by the client.
+      ipAddress: { ipAddressHeaders: ["x-real-ip"] },
       useSecureCookies: baseURL.protocol === "https:",
       defaultCookieAttributes: { httpOnly: true, sameSite: "lax" },
     },

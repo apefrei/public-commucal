@@ -27,6 +27,10 @@ Initial limits (tunable via configuration):
 | MCP | per-IP requests per minute and per day |
 | Feeds | generous per-IP limit; caching handles normal load |
 
+Implementation status (WP-1.4, 2026-11-20): login, MFA and password reset use fixed windows per IP and per
+account (`apps/web/src/server/rate-limit.ts`); every request counts. Progressive delay and ALTCHA after failures
+follow with the proposal form. If Valkey is unavailable, an in-memory limiter per process takes over.
+
 ## Rationale
 
 - ALTCHA needs no third party: no data goes to Cloudflare or hCaptcha, no cookies, no tracking, accessible without

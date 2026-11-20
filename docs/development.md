@@ -78,6 +78,12 @@ Better Auth with mandatory TOTP ([ADR-0003](adr/0003-authentication-better-auth-
 `packages/auth`. Every backend page, route handler and server action calls `requireBackendUser()`; only the MFA
 setup flow may accept a session that is not MFA-verified. Tenant permissions: `requireTenantRole()`.
 
+Pages: `/anmelden` (login, then `/anmelden/code` for TOTP or a backup code), `/mfa-einrichten` (QR code, backup
+codes, first code), `/passwort-vergessen`, `/passwort-zuruecksetzen`, `/backend`. Better Auth's endpoints are served
+under `/api/auth` behind CommuCal's rate limits (`apps/web/src/server/rate-limit.ts`, Valkey, hashed keys); Better
+Auth's own in-memory limiter stays on as a second layer. The web app must only be reachable through the proxy,
+which sets `X-Real-IP`.
+
 Create the first global admin (the password is prompted without echo); MFA setup follows at the first login:
 
 ```bash
