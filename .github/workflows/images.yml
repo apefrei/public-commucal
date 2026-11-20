@@ -19,7 +19,7 @@ concurrency:
 jobs:
   smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
         with:
@@ -95,6 +95,43 @@ jobs:
         run: |
           set -eu
           openssl rand -hex 16 | docker compose run --rm -T admin --email smoke@example.ch --name Smoke
+      - name: Check login pages, the MFA gate and the email path
+        run: |
+          set -eu
+          base=https://localhost:8443
+          [ "$(curl -sk -o /dev/null -w '%{http_code}' "$base/anmelden")" = "200" ]
+          [ "$(curl -sk -o /dev/null -w '%{redirect_url}' "$base/backend")" = "$base/anmelden" ]
+          curl -skf -o /dev/null -H "Origin: $base" -H 'content-type: application/json' \
+            -d '{"email":"smoke@example.ch","redirectTo":"/passwort-zuruecksetzen"}' \
+            "$base/api/auth/request-password-reset"
+          # web -> queue -> worker -> Mailpit
+          for _ in $(seq 1 20); do
+            if curl -sf http://127.0.0.1:8025/api/v1/messages | grep -q 'Passwort zur'; then exit 0; fi
+            sleep 1
+          done
+          echo "password reset email did not arrive" && exit 1
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+      - name: Install pnpm and Playwright with Chromium
+        run: |
+          npm install -g "$(node -p "require('./package.json').packageManager")"
+          pnpm install --frozen-lockfile --filter "@commucal/e2e..."
+          pnpm --filter @commucal/e2e exec playwright install --with-deps chromium
+      - name: End-to-end tests (login, MFA, invitation)
+        run: |
+          set -eu
+          docker compose run --rm migrate node src/seed.ts
+          password=$(openssl rand -hex 16)
+          echo "$password" | docker compose run --rm -T admin --email e2e-admin@example.ch --name "E2E Admin"
+          E2E_ADMIN_EMAIL=e2e-admin@example.ch E2E_ADMIN_PASSWORD="$password" pnpm --filter @commucal/e2e e2e
+      - name: Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: e2e/playwright-report
+          retention-days: 7
       - name: Logs on failure
         if: failure()
         run: docker compose --profile local logs --no-color --tail 100
