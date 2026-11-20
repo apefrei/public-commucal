@@ -35,6 +35,9 @@ export const AUTH_RATE_RULES: Record<string, Rule[]> = {
   ],
   "/reset-password": [{ subject: "ip", points: 10, durationSeconds: 60 * 60 }],
   "/change-password": [{ subject: "ip", points: 10, durationSeconds: 60 * 60 }],
+  // CommuCal's own server actions, checked under these names.
+  "action:register-invited": [{ subject: "ip", points: 10, durationSeconds: 60 * 60 }],
+  "action:invite": [{ subject: "ip", points: 30, durationSeconds: 60 * 60 }],
 };
 
 export interface RateLimitDecision {

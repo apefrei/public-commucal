@@ -1,0 +1,38 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "ed370144-c42b-4b3a-ade5-12cd28530d06",
+  "prevIds": [
+    "83bdb27a-e57e-440e-85cb-2721cd7e4b0c"
+  ],
+  "footprints": [
+    {
+      "statementType": "alter_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "tenant_invitation",
+        "id"
+      ],
+      "writes": [
+        "s|colprop|public.tenant_invitation.id.default"
+      ],
+      "reads": [
+        "n|tbl|public.tenant_invitation",
+        "n|sch|public",
+        "n|col|public.tenant_invitation.id"
+      ],
+      "sqlHash": "dab4d777e959b170"
+    }
+  ],
+  "deltas": [
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"tenant_invitation\",\"id\"]",
+      "set": {
+        "default": "gen_random_uuid()"
+      }
+    }
+  ]
+}

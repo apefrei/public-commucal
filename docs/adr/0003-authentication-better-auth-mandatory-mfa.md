@@ -50,7 +50,14 @@ Rules:
 - **Better Auth's own endpoints** follow the same rule: a `before` hook rejects every request with a session that
   is not MFA-verified, except login, logout, session lookup, TOTP setup and password reset. Member and invitation
   changes in a disabled tenant are rejected by organisation hooks.
-- **Accounts** are created only through an invitation (WP-1.4 part 2) or the CLI, both server-side.
+- **Accounts** are created only through an invitation or the CLI, both server-side. The registration form of an
+  invitation takes the email from the invitation, never from the form, and marks it verified.
+- **Invitations** are created by CommuCal code (`inviteToTenant`), not by Better Auth's endpoint, which requires the
+  inviter to be a member and so excludes global admins. Tenant admins invite to their tenant, global admins to any
+  active tenant; every invitation and acceptance is audited. The invitation id is the secret in the link and is a
+  random UUIDv4. Accepting stays with Better Auth (email must match) and needs an MFA-verified session.
+- **Rate limits** are CommuCal's (ADR-0007, Valkey); Better Auth's per-process limiter is off because its fixed
+  3 logins per 10 s and IP blocks an office whose staff share one IP.
 - **Backup codes and TOTP secrets** are stored encrypted with `BETTER_AUTH_SECRET`, not hashed: Better Auth
   verifies a backup code by decrypting the stored list (`plugins/two-factor/backup-codes/index.mjs`), and hashing
   would mean our own crypto code. Consequence: changing `BETTER_AUTH_SECRET` invalidates every user's MFA.

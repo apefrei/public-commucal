@@ -1,4 +1,4 @@
-import { type Database, tenant } from "@commucal/db";
+import { type Database, recordAudit, tenant, withTenant } from "@commucal/db";
 import * as schema from "@commucal/db/schema";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
@@ -58,6 +58,9 @@ export const DISABLED_PATHS = [
   "/organization/update",
   "/organization/delete",
   "/organization/leave",
+  // Invitations are created by CommuCal code (invitations.ts), so global admins can invite and every invitation
+  // is audited. Accepting stays with Better Auth.
+  "/organization/invite-member",
   // Not offered; listed in case a future default enables them.
   "/delete-user",
   "/change-email",
@@ -111,6 +114,10 @@ export function createAuth(options: CreateAuthOptions) {
     secret: options.secret,
     trustedOrigins: [baseURL.origin],
     telemetry: { enabled: false },
+    // Rate limits are enforced by the web app in Valkey, per IP and per account, shared by all instances (ADR-0007).
+    // Better Auth's own per-process limiter would add a fixed 3 logins per 10 s and IP, which blocks a municipal
+    // office whose staff share one IP.
+    rateLimit: { enabled: false },
     disabledPaths: DISABLED_PATHS,
     database: drizzleAdapter(options.db, {
       provider: "pg",
@@ -215,6 +222,18 @@ export function createAuth(options: CreateAuthOptions) {
           beforeAddMember: ({ organization: t }) => assertActive(t.id),
           beforeRemoveMember: ({ organization: t }) => assertActive(t.id),
           beforeUpdateMemberRole: ({ organization: t }) => assertActive(t.id),
+          afterAcceptInvitation: async ({ invitation, member, user, organization: t }) => {
+            await withTenant(options.db, { tenantId: t.id }, (tx) =>
+              recordAudit(tx, {
+                tenantId: t.id,
+                actorUserId: user.id,
+                action: "invitation.accept",
+                entityType: "member",
+                entityId: member.id,
+                data: { invitationId: invitation.id, role: member.role },
+              }),
+            );
+          },
         },
         sendInvitationEmail: async ({ id, email, role, organization: tenant }) => {
           await options.mailer.sendInvitation({

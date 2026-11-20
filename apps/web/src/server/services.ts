@@ -1,6 +1,6 @@
 import "server-only";
 import { createHmac } from "node:crypto";
-import { type Auth, createAuth, createQueueMailer } from "@commucal/auth";
+import { type Auth, type AuthMailer, createAuth, createQueueMailer } from "@commucal/auth";
 import { createDatabase, createQueueProducer, type Database } from "@commucal/db";
 import Valkey from "iovalkey";
 import { readServerEnv } from "@/server/env";
@@ -13,6 +13,8 @@ export interface Services {
   authDb: Database;
   /** Connected as commucal_app: tenant data under row-level security (ADR-0004). */
   appDb: Database;
+  /** Queues emails; the worker sends them (ADR-0006). */
+  mailer: AuthMailer;
   rateLimiter: AuthRateLimiter;
 }
 
@@ -29,17 +31,18 @@ async function createServices(): Promise<Services> {
   const valkey = new Valkey(env.VALKEY_URL, { lazyConnect: false, maxRetriesPerRequest: 1 });
   valkey.on("error", (error: Error) => logger.warn({ err: error }, "valkey error"));
 
+  const mailer = createQueueMailer(producer, env.PUBLIC_URL);
   const auth = createAuth({
     db: authDb,
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.PUBLIC_URL,
-    mailer: createQueueMailer(producer, env.PUBLIC_URL),
+    mailer,
   });
   // A separate key for rate-limit hashes, derived from the auth secret.
   const salt = createHmac("sha256", env.BETTER_AUTH_SECRET)
     .update("commucal:rate-limit")
     .digest("hex");
-  return { auth, authDb, appDb, rateLimiter: createAuthRateLimiter(valkey, salt) };
+  return { auth, authDb, appDb, mailer, rateLimiter: createAuthRateLimiter(valkey, salt) };
 }
 
 const globalForServices = globalThis as typeof globalThis & {

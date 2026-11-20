@@ -21,6 +21,17 @@ export {
   requireTenantRole,
   type TenantMembership,
 } from "./backend-access.ts";
+export {
+  getOpenInvitation,
+  type InvitationDetails,
+  InvitationError,
+  type InviteInput,
+  inviteToTenant,
+  listPendingInvitations,
+  type PendingInvitation,
+  type RegistrationInput,
+  registerInvitedUser,
+} from "./invitations.ts";
 export { isMfaVerifiedSession } from "./mfa.ts";
 export { type MfaResetRequest, resetMfa } from "./mfa-reset.ts";
 export { createQueueMailer } from "./queue-mailer.ts";
