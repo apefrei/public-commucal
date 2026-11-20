@@ -111,3 +111,32 @@ export async function requireTenantRole(
   }
   return role;
 }
+
+export interface TenantMembership {
+  tenantId: string;
+  slug: string;
+  name: string;
+  role: TenantRole;
+}
+
+/** Active tenants the user can work in; global admins see every active tenant as admin. */
+export async function listTenantMemberships(
+  authDb: Database,
+  user: BackendUser,
+): Promise<TenantMembership[]> {
+  if (user.globalAdmin) {
+    const rows = await authDb
+      .select({ tenantId: tenant.id, slug: tenant.slug, name: tenant.name })
+      .from(tenant)
+      .where(eq(tenant.status, "active"))
+      .orderBy(tenant.name);
+    return rows.map((row) => ({ ...row, role: "admin" }));
+  }
+  const rows = await authDb
+    .select({ tenantId: tenant.id, slug: tenant.slug, name: tenant.name, role: tenantMember.role })
+    .from(tenantMember)
+    .innerJoin(tenant, eq(tenant.id, tenantMember.organizationId))
+    .where(and(eq(tenantMember.userId, user.id), eq(tenant.status, "active")))
+    .orderBy(tenant.name);
+  return rows.map((row) => ({ ...row, role: row.role as TenantRole }));
+}

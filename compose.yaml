@@ -86,6 +86,10 @@ services:
     tmpfs: [/tmp, /app/apps/web/.next/cache]
     environment:
       DATABASE_URL: postgres://commucal_app:${DB_APP_PASSWORD}@postgres:5432/commucal
+      AUTH_DATABASE_URL: postgres://commucal_auth:${DB_AUTH_PASSWORD}@postgres:5432/commucal
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Set BETTER_AUTH_SECRET in .env}
+      PUBLIC_URL: ${PUBLIC_URL:-https://localhost:8443}
+      VALKEY_URL: redis://valkey:6379
     ports:
       - "${WEB_BIND:-127.0.0.1}:${WEB_PORT:-3000}:3000"
     networks: [edge, data]
