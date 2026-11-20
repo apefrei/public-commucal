@@ -11,14 +11,14 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
-import { appRole, workerRole } from "./roles.ts";
+import { appRole, authRole, workerRole } from "./roles.ts";
 
 /**
  * Append-only, tamper-evident audit log (requirements FR-40, FR-41; ADR-0004).
  *
  * Each tenant has its own hash chain; platform actions (tenant_id null) form one more chain. A trigger in the
  * migration "audit_log_append_only" numbers the chain (chain_seq), links prev_hash and computes hash, and rejects
- * every UPDATE, DELETE and TRUNCATE. Runtime roles may only INSERT and SELECT.
+ * every UPDATE, DELETE and TRUNCATE. App and worker may only INSERT and SELECT; the auth role may only INSERT.
  */
 export const auditLog = pgTable.withRLS(
   "audit_log",
@@ -47,11 +47,12 @@ export const auditLog = pgTable.withRLS(
       to: [appRole, workerRole],
       using: sql`${t.tenantId} = commucal_current_tenant() or commucal_is_global_admin()`,
     }),
-    // Platform entries (tenant_id null) may be written without a tenant context, e.g. failed logins.
+    // Platform entries (tenant_id null) may be written without a tenant context, e.g. failed logins. The auth role
+    // writes entries for authentication events but cannot read the log.
     pgPolicy("audit_log_append", {
       as: "permissive",
       for: "insert",
-      to: [appRole, workerRole],
+      to: [appRole, workerRole, authRole],
       withCheck: sql`${t.tenantId} is null or ${t.tenantId} = commucal_current_tenant() or commucal_is_global_admin()`,
     }),
   ],

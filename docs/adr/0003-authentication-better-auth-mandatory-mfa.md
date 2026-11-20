@@ -16,13 +16,14 @@ The playbook forbids building auth ourselves and allows Auth.js or Better Auth.
 ## Decision
 
 Use Better Auth with its `twoFactor` (TOTP and backup codes), `organization` (tenants, members, roles, invitations)
-and `admin` (global admin role) plugins and the Drizzle adapter. MFA is enforced by the application: any session of a
-user without a verified TOTP factor is restricted to the MFA setup flow.
+and `haveIBeenPwned` plugins and the Drizzle adapter. MFA is enforced by the application: any session that is not
+MFA-verified is restricted to the MFA setup flow.
 
 Rules:
 
-- A tenant is a Better Auth organisation. Roles per membership: `admin`, `contributor`. Global admins carry the
-  user-level role `global_admin`.
+- A tenant is a Better Auth organisation (our `tenant` table). Roles per membership: `admin`, `contributor`.
+  Global admins carry the user flag `global_admin`, which no API accepts as input. The `admin` plugin is not used:
+  it would add user management endpoints (impersonation, role changes) we do not need.
 - After password login, a user without a verified TOTP factor is redirected to MFA setup. Middleware and every
   server-side authorisation check reject such sessions for all other routes and actions.
 - Users cannot disable MFA. Tenant admins (own tenant) and global admins can reset it; the reset is audit-logged,
@@ -31,6 +32,33 @@ Rules:
 - Password policy: at least 12 characters plus a breached-password check; no composition rules.
 - Sessions: HttpOnly, Secure, SameSite=Lax cookies; origin checks for state-changing requests.
 - The first global admin is created by a CLI command in the container.
+
+### Implementation rules (WP-1.4, Better Auth 1.7.26)
+
+- **Own database role.** Better Auth connects as `commucal_auth`. Only this role can read users, sessions,
+  credentials, TOTP factors, memberships and invitations; it can read tenants (membership lookup before any tenant
+  context exists) and append to the audit log, but not read calendars, events or the audit log. App, worker and MCP
+  get no privileges on the auth tables. Row-level security on the auth tables admits only `commucal_auth`, so a
+  grant added by mistake still returns no rows.
+- **MFA-verified session:** the user has a verified TOTP factor (`two_factor_enabled`) and the session was created
+  at or after `two_factor_enabled_at`. Better Auth replaces the session when TOTP is verified at setup and creates
+  a login session only after the TOTP step; the timestamp also excludes sessions opened in another browser before
+  MFA setup.
+- **Closed paths** (HTTP 404, list in `packages/auth/src/auth.ts`): public sign-up, disabling MFA, email OTP (it
+  would mark MFA as enabled without verifying a code), creating, changing, deleting and leaving tenants.
+  "Trust this device" is rejected, so TOTP is required at every login.
+- **Accounts** are created only through an invitation (WP-1.4 part 2) or the CLI, both server-side.
+- **Backup codes and TOTP secrets** are stored encrypted with `BETTER_AUTH_SECRET`, not hashed: Better Auth
+  verifies a backup code by decrypting the stored list (`plugins/two-factor/backup-codes/index.mjs`), and hashing
+  would mean our own crypto code. Consequence: changing `BETTER_AUTH_SECRET` invalidates every user's MFA.
+- **Breached passwords:** Have I Been Pwned range API (k-anonymity, only five hash characters leave the server).
+  If the service is unreachable, setting a password fails (fail closed).
+- **Sessions** last 8 hours and are read from the database on every request (no cookie cache), so a revoked
+  session or a reset MFA takes effect immediately. A password reset ends all sessions and keeps MFA.
+- **MFA reset** (`resetMfa`): global admins for anyone; tenant admins for members of their tenant who are not
+  global admins; nobody for themselves. Factor removal, session revocation and audit entry share one transaction.
+- **Known limitation:** Better Auth does not keep a record of used TOTP codes, so a code can be reused within its
+  30-second window. Account lockout after 10 failed attempts (15 minutes) is Better Auth's default and stays on.
 
 ## Rationale
 
@@ -49,9 +77,13 @@ Rules:
 
 ## Consequences
 
-- Positive: mandatory MFA is enforced on the server and covered by tests; standard, maintained auth code.
+- Positive: mandatory MFA is enforced on the server and covered by tests; standard, maintained auth code;
+  credentials and sessions are invisible to every role except `commucal_auth`.
 - Negative: dependency on Better Auth's release pace and schema; pinned versions and upgrade PRs with full tests.
-- Follow-up: WP-1.4; E2E tests proving that a user without MFA cannot reach any backend route or action.
+- Negative: `BETTER_AUTH_SECRET` must be kept and backed up like a key; losing or rotating it forces every user
+  through an MFA reset.
+- Follow-up: WP-1.4 part 2 (web integration, invitations, emails, rate limiting on Valkey); E2E tests proving that
+  a user without MFA cannot reach any backend route or action.
 - ⚠️ Security-relevant: changes to this flow are high risk per `.claude/rules/policies.md`.
 
 ## References

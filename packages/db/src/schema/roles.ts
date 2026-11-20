@@ -5,3 +5,5 @@ import { pgRole } from "drizzle-orm/pg-core";
 export const appRole = pgRole("commucal_app").existing();
 export const workerRole = pgRole("commucal_worker").existing();
 export const mcpRole = pgRole("commucal_mcp").existing();
+/** Used only by Better Auth (ADR-0003): users, sessions, credentials, memberships; reads tenants. */
+export const authRole = pgRole("commucal_auth").existing();

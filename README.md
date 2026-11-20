@@ -51,6 +51,7 @@ apps/mcp          MCP server
 apps/worker       Background jobs
 packages/core     Domain logic shared by all apps (time zones, recurrence, iCal)
 packages/db       Database schema, migrations, roles, row-level security
+packages/auth     Better Auth configuration, mandatory MFA, tenant roles, global-admin CLI
 packages/config   Shared TypeScript configuration
 deploy/           Caddy configuration for staging; production nginx snippet and runbooks follow
 docs/             Requirements, ADRs, development guide

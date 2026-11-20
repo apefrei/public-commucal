@@ -24,6 +24,7 @@ and tamper-evident with a hash chain.
 | `commucal_app` | `web` | DML on tenant tables under RLS; `INSERT`/`SELECT` only on `audit_log` |
 | `commucal_worker` | `worker` | Like `commucal_app`, plus the specific cross-tenant jobs (anonymisation, purge) via `SECURITY DEFINER` functions |
 | `commucal_mcp` | `mcp` | `SELECT` on the `public_*` views only; no access to base tables |
+| `commucal_auth` | Better Auth in `web`, `admin` CLI | DML on the auth tables (users, sessions, credentials, TOTP, memberships, invitations); `SELECT` on `tenant`; `INSERT` only on `audit_log` (ADR-0003, added in WP-1.4) |
 
 No runtime role has `BYPASSRLS` or owns tables.
 
@@ -45,7 +46,7 @@ No runtime role has `BYPASSRLS` or owns tables.
 
 - `audit_log` rows: id, tenant_id (null for platform actions), chain_seq, actor_user_id or actor_label, action,
   entity type and id, data (jsonb, no secrets), created_at, prev_hash, hash.
-- Runtime roles have only `INSERT` and `SELECT`; triggers additionally reject `UPDATE`, `DELETE` and `TRUNCATE` for
+- Runtime roles have only `INSERT` and `SELECT` (`commucal_auth`: `INSERT` only); triggers additionally reject `UPDATE`, `DELETE` and `TRUNCATE` for
   everyone, including the owner.
 - A `SECURITY DEFINER` insert trigger takes a per-chain advisory lock, numbers the entry (`chain_seq`), links
   `prev_hash` and computes `hash = sha256(prev_hash || canonical row)`. Values for these columns and for

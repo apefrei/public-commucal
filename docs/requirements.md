@@ -105,7 +105,7 @@ Milestone in brackets: [M1], [M2], [M3] (see section 9).
 - FR-3 [M1]: **MFA is mandatory for every backend account.** A user without a configured TOTP factor is forced into
   MFA setup after the first password login and cannot reach any backend page or API before completing it.
   Users cannot disable MFA themselves (ADR-0003).
-- FR-4 [M1]: Backup codes are issued at MFA setup (one-time use, stored hashed).
+- FR-4 [M1]: Backup codes are issued at MFA setup (one-time use, stored encrypted; ADR-0003).
 - FR-5 [M1]: Tenant admins (for their tenant) and global admins can reset a user's MFA. The reset is written to the
   audit log and the affected user is notified by email. After a reset the user must set up MFA again at next login.
 - FR-6 [M1]: Password policy: minimum 12 characters, checked against a breached-password list (no composition rules).
