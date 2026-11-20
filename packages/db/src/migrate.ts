@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import pg from "pg";
+import { installQueues } from "./queue.ts";
 
 export const MIGRATIONS_FOLDER = fileURLToPath(new URL("../drizzle", import.meta.url));
 
@@ -46,7 +47,8 @@ async function main(): Promise<void> {
   try {
     await runMigrations(pool);
     await enableRuntimeRoles(pool, process.env);
-    process.stdout.write("migrations applied, runtime roles enabled\n");
+    await installQueues(connectionString);
+    process.stdout.write("migrations applied, runtime roles enabled, queues installed\n");
   } finally {
     await pool.end();
   }

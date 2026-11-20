@@ -21,7 +21,7 @@ docker compose -f compose.yaml -f compose.dev.yaml --profile local up --watch
 - A change to `pnpm-lock.yaml` rebuilds the dev image.
 - App: `https://<COMMUCAL_HOST>:8443` (Caddy with its own local CA; accept the certificate warning or trust the
   root certificate from the `caddy_data` volume, `pki/authorities/local/root.crt`).
-- Mail: Mailpit at `http://127.0.0.1:8025`.
+- Mail: the worker sends every email to Mailpit (profile `local`), web UI at `http://127.0.0.1:8025`.
 
 ## Checks
 
@@ -65,6 +65,13 @@ the database numbers, links and hashes them (append-only, see ADR-0004).
 Integration tests (`packages/db`, `packages/auth`) create a throw-away database per run; they need
 `TEST_DATABASE_URL` (set by the Compose profile `test` and in CI).
 
+## Jobs and email
+
+Background jobs run on pg-boss in PostgreSQL (schema `pgboss`). The `migrate` container installs the schema and the
+queues as owner; `web` may only send jobs, the `worker` processes them. Emails (ADR-0006) are queued with
+`enqueueEmail()` and sent by the worker as plain text: through Resend if `RESEND_API_KEY` is set, otherwise through
+Mailpit (`MAILPIT_URL`). Without either the worker does not start.
+
 ## Authentication
 
 Better Auth with mandatory TOTP ([ADR-0003](adr/0003-authentication-better-auth-mandatory-mfa.md)), configured in
@@ -92,6 +99,7 @@ docker compose up -d --build                  # without Caddy; web and mcp on 12
 | `postgres` | `postgres:18.7-alpine` | volume `pgdata`, network `data` only |
 | `valkey` | `valkey/valkey:9.2.0-alpine` | no persistence, network `data` only |
 | `proxy` | `caddy:2.11.9-alpine` | profile `local`; HTTPS on `PROXY_BIND:PROXY_PORT` |
+| `mailpit` | `axllent/mailpit:v1.34.0` | profile `local`; catches all email (development, staging) |
 | `admin` | target `admin` | profile `tools`; one-off commands such as creating a global admin |
 
 Hardening: app containers run as non-root with a read-only root filesystem, no Linux capabilities and

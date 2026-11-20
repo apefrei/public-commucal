@@ -28,6 +28,10 @@ and tamper-evident with a hash chain.
 
 No runtime role has `BYPASSRLS` or owns tables.
 
+Job queue (pg-boss, schema `pgboss`, installed by the owner in `migrate`): `commucal_app` may send jobs (no `UPDATE`/`DELETE`
+on jobs), `commucal_worker` processes and maintains them; no runtime role may create or delete queues; `commucal_mcp`
+and `commucal_auth` have no access.
+
 ### Tenant isolation
 
 - Every tenant-owned table has `tenant_id` and an RLS policy

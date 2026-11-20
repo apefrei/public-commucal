@@ -7,12 +7,17 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import type { Database } from "../client.ts";
 import { runMigrations } from "../migrate.ts";
+import { installQueues } from "../queue.ts";
 
 export type RuntimeRole = "commucal_app" | "commucal_worker" | "commucal_mcp" | "commucal_auth";
 
 export interface TestDatabase {
   /** Superuser pool on the test database, for setup and assertions that bypass row-level security. */
   admin: pg.Pool;
+  /** Superuser connection string of the test database. */
+  url: string;
+  /** Connection string of the test database for a runtime role (e.g. for a pg-boss instance). */
+  urlAs(role: RuntimeRole): string;
   /** Drizzle database whose connections act as the given runtime role. */
   as(role: RuntimeRole): Database;
   /** Raw pool whose connections act as the given runtime role. */
@@ -33,7 +38,9 @@ function ignoreTerminationOnDrop(pool: pg.Pool): pg.Pool {
   return pool;
 }
 
-export async function createTestDatabase(): Promise<TestDatabase> {
+export async function createTestDatabase(
+  options: { queues?: boolean } = {},
+): Promise<TestDatabase> {
   const baseUrl = process.env.TEST_DATABASE_URL;
   if (!baseUrl) {
     throw new Error(
@@ -50,6 +57,9 @@ export async function createTestDatabase(): Promise<TestDatabase> {
 
   const admin = ignoreTerminationOnDrop(new pg.Pool({ connectionString, max: 2 }));
   await runMigrations(admin);
+  if (options.queues) {
+    await installQueues(connectionString);
+  }
 
   const pools = new Map<RuntimeRole, pg.Pool>();
   const poolAs = (role: RuntimeRole): pg.Pool => {
@@ -64,8 +74,16 @@ export async function createTestDatabase(): Promise<TestDatabase> {
     return pool;
   };
 
+  const urlAs = (role: RuntimeRole): string => {
+    const roleUrl = new URL(connectionString);
+    roleUrl.searchParams.set("options", `-c role=${role}`);
+    return roleUrl.toString();
+  };
+
   return {
     admin,
+    url: connectionString,
+    urlAs,
     poolAs,
     as: (role) => drizzle({ client: poolAs(role) }),
     async drop() {
