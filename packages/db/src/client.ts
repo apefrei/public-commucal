@@ -14,8 +14,15 @@ export interface DatabaseHandle {
  */
 export function createDatabase(
   connectionString: string,
-  options: { max?: number } = {},
+  options: { max?: number; onError?: (error: Error) => void } = {},
 ): DatabaseHandle {
   const pool = new pg.Pool({ connectionString, max: options.max ?? 10 });
+  // An idle connection can fail (e.g. database restart); the pool drops it. Without a listener, node-postgres
+  // raises the error as unhandled and the process crashes.
+  pool.on(
+    "error",
+    options.onError ??
+      ((error) => process.stderr.write(`idle database connection failed: ${error.message}\n`)),
+  );
   return { db: drizzle({ client: pool }), pool };
 }
