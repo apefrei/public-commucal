@@ -43,11 +43,18 @@ No runtime role has `BYPASSRLS` or owns tables.
 
 ### Audit log
 
-- `audit_log` rows: id, tenant_id (nullable for platform actions), actor_user_id, action, entity type and id,
-  data (jsonb, no secrets), created_at, prev_hash, hash.
-- `UPDATE`, `DELETE` and `TRUNCATE` are revoked from all runtime roles; a trigger additionally raises on update/delete.
-- An insert trigger computes `hash = sha256(prev_hash || canonical row)` per tenant chain under an advisory lock.
-- A daily worker job verifies the chains (FR-43).
+- `audit_log` rows: id, tenant_id (null for platform actions), chain_seq, actor_user_id or actor_label, action,
+  entity type and id, data (jsonb, no secrets), created_at, prev_hash, hash.
+- Runtime roles have only `INSERT` and `SELECT`; triggers additionally reject `UPDATE`, `DELETE` and `TRUNCATE` for
+  everyone, including the owner.
+- A `SECURITY DEFINER` insert trigger takes a per-chain advisory lock, numbers the entry (`chain_seq`), links
+  `prev_hash` and computes `hash = sha256(prev_hash || canonical row)`. Values for these columns and for
+  `created_at` supplied by the caller are ignored. Ordering uses `chain_seq`, not `id`, because ids are assigned
+  before the lock; time enters the hash as microseconds since the epoch, so it does not depend on the session time zone.
+- `commucal_verify_audit_chain(tenant_id)` (executable by the worker only) returns the first broken entry; the
+  worker runs it daily (FR-43).
+- Limits: a superuser can disable the triggers. Changed or removed entries inside a chain are then detected, removing
+  the newest entries is not; anchoring chain heads outside the database can be added later if needed.
 - When a user is deleted, audit rows keep the user id; the display name is shown as "deleted user".
 
 ### Other schema rules

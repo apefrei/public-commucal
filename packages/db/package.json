@@ -12,7 +12,8 @@
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
     "db:custom": "drizzle-kit generate --custom",
-    "migrate": "node src/migrate.ts"
+    "migrate": "node src/migrate.ts",
+    "seed": "node src/seed.ts"
   },
   "dependencies": {
     "drizzle-orm": "1.0.0-rc.5",

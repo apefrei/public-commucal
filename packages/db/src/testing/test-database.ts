@@ -20,6 +20,19 @@ export interface TestDatabase {
   drop(): Promise<void>;
 }
 
+/**
+ * DROP DATABASE ... WITH (FORCE) terminates connections that are still closing (57P01). That is expected during
+ * cleanup; every other idle-connection error is raised.
+ */
+function ignoreTerminationOnDrop(pool: pg.Pool): pg.Pool {
+  pool.on("error", (error: Error & { code?: string }) => {
+    if (error.code !== "57P01") {
+      throw error;
+    }
+  });
+  return pool;
+}
+
 export async function createTestDatabase(): Promise<TestDatabase> {
   const baseUrl = process.env.TEST_DATABASE_URL;
   if (!baseUrl) {
@@ -35,7 +48,7 @@ export async function createTestDatabase(): Promise<TestDatabase> {
   url.pathname = `/${name}`;
   const connectionString = url.toString();
 
-  const admin = new pg.Pool({ connectionString, max: 2 });
+  const admin = ignoreTerminationOnDrop(new pg.Pool({ connectionString, max: 2 }));
   await runMigrations(admin);
 
   const pools = new Map<RuntimeRole, pg.Pool>();
@@ -43,7 +56,9 @@ export async function createTestDatabase(): Promise<TestDatabase> {
     let pool = pools.get(role);
     if (!pool) {
       // The role is set as a startup parameter, so it applies before the first query on every connection.
-      pool = new pg.Pool({ connectionString, max: 2, options: `-c role=${role}` });
+      pool = ignoreTerminationOnDrop(
+        new pg.Pool({ connectionString, max: 2, options: `-c role=${role}` }),
+      );
       pools.set(role, pool);
     }
     return pool;
@@ -56,6 +71,18 @@ export async function createTestDatabase(): Promise<TestDatabase> {
     async drop() {
       await Promise.all([...pools.values()].map((pool) => pool.end()));
       await admin.end();
+      // pool.end() resolves before the sockets are closed (pg-pool removes clients first and ends them
+      // asynchronously). Wait until the server has no session on the database left, so FORCE has nothing to kill.
+      for (let attempt = 0; attempt < 50; attempt++) {
+        const sessions = await maintenance.query<{ n: number }>(
+          "select count(*)::int as n from pg_stat_activity where datname = $1",
+          [name],
+        );
+        if (sessions.rows[0]?.n === 0) {
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
       await maintenance.query(`DROP DATABASE ${pg.escapeIdentifier(name)} WITH (FORCE)`);
       await maintenance.end();
     },

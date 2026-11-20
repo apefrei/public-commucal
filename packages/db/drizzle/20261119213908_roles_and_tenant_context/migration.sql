@@ -2,17 +2,23 @@
 -- Roles are created without password and without LOGIN; the migrate container enables LOGIN and sets the
 -- passwords from its environment, so no secret is stored in a migration.
 
+-- Roles exist once per cluster, while every database runs this migration. Two migrations running at the same time
+-- (e.g. parallel integration tests) may both see a role as missing; the second CREATE ROLE then fails and is ignored.
 DO $$
+DECLARE
+  role_name text;
 BEGIN
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'commucal_app') THEN
-    CREATE ROLE commucal_app NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
-  END IF;
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'commucal_worker') THEN
-    CREATE ROLE commucal_worker NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
-  END IF;
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'commucal_mcp') THEN
-    CREATE ROLE commucal_mcp NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
-  END IF;
+  FOREACH role_name IN ARRAY ARRAY['commucal_app', 'commucal_worker', 'commucal_mcp'] LOOP
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = role_name) THEN
+      BEGIN
+        EXECUTE format(
+          'CREATE ROLE %I NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS', role_name
+        );
+      EXCEPTION
+        WHEN duplicate_object OR unique_violation THEN NULL;
+      END;
+    END IF;
+  END LOOP;
 END
 $$;
 --> statement-breakpoint
