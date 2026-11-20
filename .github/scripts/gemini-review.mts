@@ -59,6 +59,8 @@ Rules:
 - At most 5 findings, most important first. Each finding: severity (🛑 must fix, ⚠️ should fix), \`path:line\`,
   one or two sentences with the problem and the fix. Add code only if one line makes the fix clear.
 - Only report what you can point to in the diff. Mark anything uncertain with "Unverified:".
+- Lock files (pnpm-lock.yaml, package-lock.json), snapshots and SVGs are left out of the diff on purpose. Never
+  report them as missing or outdated; CI installs with --frozen-lockfile and fails if the lock file is stale.
 - Start with a one-line verdict. If there is nothing important, write only: "✅ No important issues found."
 - English, plain Markdown, no headings.`;
 
