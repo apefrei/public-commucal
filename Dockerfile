@@ -5,6 +5,7 @@
 #   web     – Next.js standalone server
 #   mcp     – MCP server, TypeScript run directly by Node
 #   worker  – background jobs, TypeScript run directly by Node
+#   migrate – applies database migrations and enables the runtime roles, then exits
 
 ARG NODE_IMAGE=node:26.13.1-alpine
 
@@ -48,13 +49,16 @@ RUN pnpm --filter @commucal/web build
 # Production dependencies of the Node services only (no Next.js, no dev tooling).
 FROM manifests AS services-deps
 RUN --mount=type=cache,id=commucal-pnpm,target=/home/node/.pnpm-store,uid=1000,gid=1000 \
-    pnpm install --frozen-lockfile --prod --filter "@commucal/mcp..." --filter "@commucal/worker..."
+    pnpm install --frozen-lockfile --prod \
+      --filter "@commucal/mcp..." --filter "@commucal/worker..." --filter "@commucal/db..."
 
 FROM ${NODE_IMAGE} AS services
 ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=services-deps --chown=node:node /app ./
 COPY --chown=node:node packages/core/src packages/core/src
+COPY --chown=node:node packages/db/src packages/db/src
+COPY --chown=node:node packages/db/drizzle packages/db/drizzle
 COPY --chown=node:node apps/mcp/src apps/mcp/src
 COPY --chown=node:node apps/worker/src apps/worker/src
 USER node
@@ -68,6 +72,10 @@ CMD ["node", "src/main.ts"]
 FROM services AS worker
 WORKDIR /app/apps/worker
 CMD ["node", "src/main.ts"]
+
+FROM services AS migrate
+WORKDIR /app/packages/db
+CMD ["node", "src/migrate.ts"]
 
 FROM ${NODE_IMAGE} AS web
 ENV NODE_ENV=production \
