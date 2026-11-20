@@ -95,6 +95,21 @@ jobs:
         run: |
           set -eu
           openssl rand -hex 16 | docker compose run --rm -T admin --email smoke@example.ch --name Smoke
+      - name: Check login pages, the MFA gate and the email path
+        run: |
+          set -eu
+          base=https://localhost:8443
+          [ "$(curl -sk -o /dev/null -w '%{http_code}' "$base/anmelden")" = "200" ]
+          [ "$(curl -sk -o /dev/null -w '%{redirect_url}' "$base/backend")" = "$base/anmelden" ]
+          curl -skf -o /dev/null -H "Origin: $base" -H 'content-type: application/json' \
+            -d '{"email":"smoke@example.ch","redirectTo":"/passwort-zuruecksetzen"}' \
+            "$base/api/auth/request-password-reset"
+          # web -> queue -> worker -> Mailpit
+          for _ in $(seq 1 20); do
+            if curl -sf http://127.0.0.1:8025/api/v1/messages | grep -q 'Passwort zur'; then exit 0; fi
+            sleep 1
+          done
+          echo "password reset email did not arrive" && exit 1
       - name: Logs on failure
         if: failure()
         run: docker compose --profile local logs --no-color --tail 100
