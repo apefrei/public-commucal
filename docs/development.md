@@ -81,7 +81,7 @@ setup flow may accept a session that is not MFA-verified. Tenant permissions: `r
 Pages: `/anmelden` (login, then `/anmelden/code` for TOTP or a backup code), `/mfa-einrichten` (QR code, backup
 codes, first code), `/passwort-vergessen`, `/passwort-zuruecksetzen`, `/backend`. Better Auth's endpoints are served
 under `/api/auth` behind CommuCal's rate limits (`apps/web/src/server/rate-limit.ts`, Valkey, hashed keys); Better
-Auth's own in-memory limiter stays on as a second layer. The web app must only be reachable through the proxy,
+Auth's own per-process limiter is off (its fixed 3 logins per 10 s and IP would block an office behind one IP). The web app must only be reachable through the proxy,
 which sets `X-Real-IP`.
 
 Create the first global admin (the password is prompted without echo); MFA setup follows at the first login:
@@ -89,6 +89,23 @@ Create the first global admin (the password is prompted without echo); MFA setup
 ```bash
 docker compose run --rm admin --email ops@example.ch --name "Ops"
 ```
+
+## End-to-end tests
+
+Playwright tests in `e2e/` drive Chromium through login, mandatory MFA setup, invitation, registration and
+acceptance, with axe accessibility checks (WCAG 2.1 AA). They need the running stack with demo data, a global admin
+and Mailpit; CI runs them in the image smoke test. Locally, on a host without Node, in a Debian-based container:
+
+```bash
+docker compose --profile local up -d --wait
+docker compose run --rm migrate node src/seed.ts
+read -rs PW && printf '%s\n' "$PW" | docker compose run --rm -T admin --email e2e-admin@example.ch --name "E2E Admin"
+docker run --rm --network host -e E2E_ADMIN_EMAIL=e2e-admin@example.ch -e E2E_ADMIN_PASSWORD="$PW" \
+  -v "$PWD:/repo" -w /repo node:26.13.1-trixie sh -c 'npm i -g pnpm@12.21.0 && pnpm install --filter "@commucal/e2e..." \
+  && pnpm --filter @commucal/e2e exec playwright install --with-deps chromium && pnpm --filter @commucal/e2e e2e'
+```
+
+The tests change the database (MFA of the admin, a new member of Musterdorf); run them against a fresh stack.
 
 ## Production-like stack (staging)
 

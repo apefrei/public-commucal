@@ -172,7 +172,8 @@ export const tenantMember = pgTable.withRLS(
 export const tenantInvitation = pgTable.withRLS(
   "tenant_invitation",
   {
-    id: id(),
+    // The id is the secret in the invitation link: random UUIDv4 (122 random bits), not time-ordered UUIDv7.
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
     organizationId: uuid("tenant_id")
       .notNull()
       .references(() => tenant.id, { onDelete: "cascade" }),

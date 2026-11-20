@@ -1,0 +1,5 @@
+{
+  "extends": "@commucal/config/tsconfig.node.json",
+  "compilerOptions": { "lib": ["esnext", "dom"] },
+  "include": ["tests", "playwright.config.ts"]
+}

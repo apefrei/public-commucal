@@ -86,7 +86,9 @@ export function MfaSetup() {
       <p className="mt-3 text-sm text-neutral-700">
         Scannen nicht möglich? Geben Sie diesen Schlüssel in der App ein:
       </p>
-      <p className="mt-1 font-mono text-sm break-all">{secret}</p>
+      <p data-testid="totp-secret" className="mt-1 font-mono text-sm break-all">
+        {secret}
+      </p>
 
       <h2 className="mt-8 text-lg font-semibold">2. Backup-Codes sichern</h2>
       <BackupCodes codes={factor.backupCodes} saved={saved} onSavedChange={setSaved} />

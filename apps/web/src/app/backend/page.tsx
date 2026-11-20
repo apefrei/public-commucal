@@ -1,8 +1,10 @@
-import { listTenantMemberships } from "@commucal/auth";
+import { listPendingInvitations, listTenantMemberships } from "@commucal/auth";
 import type { Metadata } from "next";
 import { requireBackendPage } from "@/server/backend";
 import { getServices } from "@/server/services";
+import { AcceptInvitationButton } from "./accept-invitation-button";
 import { SignOutButton } from "./sign-out-button";
+import { TenantList } from "./tenant-list";
 
 export const metadata: Metadata = { title: "Backend – CommuCal" };
 
@@ -11,7 +13,10 @@ const ROLE_LABELS = { admin: "Administration", contributor: "Redaktion" } as con
 export default async function BackendPage() {
   const user = await requireBackendPage();
   const { authDb } = await getServices();
-  const memberships = await listTenantMemberships(authDb, user);
+  const [memberships, invitations] = await Promise.all([
+    listTenantMemberships(authDb, user),
+    listPendingInvitations(authDb, user),
+  ]);
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-12">
@@ -26,24 +31,33 @@ export default async function BackendPage() {
         <SignOutButton />
       </header>
 
+      {invitations.length > 0 ? (
+        <section aria-labelledby="invitations" className="mt-10">
+          <h2 id="invitations" className="text-lg font-semibold">
+            Offene Einladungen
+          </h2>
+          <ul className="mt-3 divide-y divide-neutral-200 rounded-md border border-neutral-300">
+            {invitations.map((invitation) => (
+              <li key={invitation.id} className="flex items-center justify-between gap-4 px-4 py-3">
+                <span>
+                  {invitation.tenantName}{" "}
+                  <span className="text-sm text-neutral-700">({ROLE_LABELS[invitation.role]})</span>
+                </span>
+                <AcceptInvitationButton
+                  invitationId={invitation.id}
+                  tenantName={invitation.tenantName}
+                />
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       <section aria-labelledby="tenants" className="mt-10">
         <h2 id="tenants" className="text-lg font-semibold">
           Ihre Gemeinden und Vereine
         </h2>
-        {memberships.length === 0 ? (
-          <p className="mt-2 text-neutral-700">
-            Sie sind noch keiner Gemeinde und keinem Verein zugeordnet.
-          </p>
-        ) : (
-          <ul className="mt-3 divide-y divide-neutral-200 rounded-md border border-neutral-300">
-            {memberships.map((membership) => (
-              <li key={membership.tenantId} className="flex justify-between px-4 py-3">
-                <span>{membership.name}</span>
-                <span className="text-sm text-neutral-700">{ROLE_LABELS[membership.role]}</span>
-              </li>
-            ))}
-          </ul>
-        )}
+        <TenantList memberships={memberships} />
         <p className="mt-6 text-sm text-neutral-600">
           Kalender und Termine folgen in einem nächsten Schritt.
         </p>

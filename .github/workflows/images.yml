@@ -19,7 +19,7 @@ concurrency:
 jobs:
   smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
         with:
@@ -110,6 +110,28 @@ jobs:
             sleep 1
           done
           echo "password reset email did not arrive" && exit 1
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+      - name: Install pnpm and Playwright with Chromium
+        run: |
+          npm install -g "$(node -p "require('./package.json').packageManager")"
+          pnpm install --frozen-lockfile --filter "@commucal/e2e..."
+          pnpm --filter @commucal/e2e exec playwright install --with-deps chromium
+      - name: End-to-end tests (login, MFA, invitation)
+        run: |
+          set -eu
+          docker compose run --rm migrate node src/seed.ts
+          password=$(openssl rand -hex 16)
+          echo "$password" | docker compose run --rm -T admin --email e2e-admin@example.ch --name "E2E Admin"
+          E2E_ADMIN_EMAIL=e2e-admin@example.ch E2E_ADMIN_PASSWORD="$password" pnpm --filter @commucal/e2e e2e
+      - name: Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: e2e/playwright-report
+          retention-days: 7
       - name: Logs on failure
         if: failure()
         run: docker compose --profile local logs --no-color --tail 100
