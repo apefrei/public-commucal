@@ -6,6 +6,7 @@ import {
   foreignKey,
   index,
   integer,
+  pgPolicy,
   pgTable,
   primaryKey,
   text,
@@ -13,6 +14,7 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
+import { authRole } from "./roles.ts";
 import { tenantIsolationPolicy } from "./tenancy.ts";
 
 const id = () => uuid("id").primaryKey().default(sql`uuidv7()`);
@@ -22,8 +24,7 @@ const deletedAt = () => timestamp("deleted_at", { withTimezone: true });
 const localeCheck = (column: string) => sql.raw(`${column} in ('de', 'fr', 'it')`);
 
 /**
- * A municipality or association (requirements FR-1). Also the Better Auth organisation (ADR-0003); the auth
- * columns follow in WP-1.4.
+ * A municipality or association (requirements FR-1). Also the Better Auth organisation (ADR-0003).
  */
 export const tenant = pgTable.withRLS(
   "tenant",
@@ -34,6 +35,9 @@ export const tenant = pgTable.withRLS(
     status: text("status").notNull().default("active"),
     defaultLanguage: text("default_language").notNull().default("de"),
     enabledLanguages: text("enabled_languages").array().notNull().default(sql`'{de}'::text[]`),
+    /** Better Auth organisation fields (ADR-0003); unused by CommuCal so far. */
+    logo: text("logo"),
+    metadata: text("metadata"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -46,6 +50,14 @@ export const tenant = pgTable.withRLS(
     ),
     check("tenant_slug_format_check", sql`${t.slug} ~ '^[a-z0-9]+(-[a-z0-9]+)*$'`),
     tenantIsolationPolicy("tenant_isolation", t.id),
+    // Better Auth resolves memberships before any tenant context exists. It may only read tenants; creating,
+    // renaming and disabling them stays with the app under the global-admin context (FR-1).
+    pgPolicy("tenant_auth_read", {
+      as: "permissive",
+      for: "select",
+      to: authRole,
+      using: sql`true`,
+    }),
   ],
 );
 

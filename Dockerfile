@@ -27,6 +27,7 @@ COPY --chown=node:node apps/mcp/package.json apps/mcp/
 COPY --chown=node:node apps/worker/package.json apps/worker/
 COPY --chown=node:node packages/core/package.json packages/core/
 COPY --chown=node:node packages/db/package.json packages/db/
+COPY --chown=node:node packages/auth/package.json packages/auth/
 COPY --chown=node:node packages/config/package.json packages/config/
 
 FROM manifests AS deps
@@ -50,7 +51,8 @@ RUN pnpm --filter @commucal/web build
 FROM manifests AS services-deps
 RUN --mount=type=cache,id=commucal-pnpm,target=/home/node/.pnpm-store,uid=1000,gid=1000 \
     pnpm install --frozen-lockfile --prod \
-      --filter "@commucal/mcp..." --filter "@commucal/worker..." --filter "@commucal/db..."
+      --filter "@commucal/mcp..." --filter "@commucal/worker..." --filter "@commucal/db..." \
+      --filter "@commucal/auth..."
 
 FROM ${NODE_IMAGE} AS services
 ENV NODE_ENV=production
@@ -59,6 +61,7 @@ COPY --from=services-deps --chown=node:node /app ./
 COPY --chown=node:node packages/core/src packages/core/src
 COPY --chown=node:node packages/db/src packages/db/src
 COPY --chown=node:node packages/db/drizzle packages/db/drizzle
+COPY --chown=node:node packages/auth/src packages/auth/src
 COPY --chown=node:node apps/mcp/src apps/mcp/src
 COPY --chown=node:node apps/worker/src apps/worker/src
 USER node
@@ -76,6 +79,11 @@ CMD ["node", "src/main.ts"]
 FROM services AS migrate
 WORKDIR /app/packages/db
 CMD ["node", "src/migrate.ts"]
+
+# One-off admin commands, e.g. creating the first global admin (FR-8).
+FROM services AS admin
+WORKDIR /app/packages/auth
+ENTRYPOINT ["node", "src/create-global-admin.ts"]
 
 FROM ${NODE_IMAGE} AS web
 ENV NODE_ENV=production \

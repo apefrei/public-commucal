@@ -2,6 +2,7 @@
 #   docker compose up -d                      production-like stack; web and mcp on 127.0.0.1 for the host nginx
 #   docker compose --profile local up -d      plus Caddy with HTTPS (staging on cyberfrog, local development)
 #   docker compose --profile test run --rm test
+#   docker compose run --rm admin --email … --name …   create a global admin (profile tools)
 # Development with live sync: see compose.dev.yaml and docs/development.md.
 
 name: commucal
@@ -70,6 +71,7 @@ services:
       DB_APP_PASSWORD: ${DB_APP_PASSWORD:?Set DB_APP_PASSWORD in .env}
       DB_WORKER_PASSWORD: ${DB_WORKER_PASSWORD:?Set DB_WORKER_PASSWORD in .env}
       DB_MCP_PASSWORD: ${DB_MCP_PASSWORD:?Set DB_MCP_PASSWORD in .env}
+      DB_AUTH_PASSWORD: ${DB_AUTH_PASSWORD:?Set DB_AUTH_PASSWORD in .env}
     networks: [data]
     depends_on:
       postgres: { condition: service_healthy }
@@ -147,6 +149,25 @@ services:
     depends_on:
       web: { condition: service_healthy }
       mcp: { condition: service_healthy }
+
+  # One-off admin commands (FR-8), e.g.: docker compose run --rm admin --email ops@example.ch --name "Ops"
+  admin:
+    profiles: [tools]
+    <<: *hardening
+    restart: "no"
+    build:
+      context: .
+      target: admin
+    image: commucal-admin:local
+    tmpfs: [/tmp]
+    environment:
+      AUTH_DATABASE_URL: postgres://commucal_auth:${DB_AUTH_PASSWORD}@postgres:5432/commucal
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Set BETTER_AUTH_SECRET in .env}
+      BETTER_AUTH_URL: ${PUBLIC_URL:-https://localhost:8443}
+    # edge: the breached-password check calls api.pwnedpasswords.com (FR-6).
+    networks: [edge, data]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
 
   test:
     profiles: [test]

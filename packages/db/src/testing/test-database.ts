@@ -8,7 +8,7 @@ import pg from "pg";
 import type { Database } from "../client.ts";
 import { runMigrations } from "../migrate.ts";
 
-export type RuntimeRole = "commucal_app" | "commucal_worker" | "commucal_mcp";
+export type RuntimeRole = "commucal_app" | "commucal_worker" | "commucal_mcp" | "commucal_auth";
 
 export interface TestDatabase {
   /** Superuser pool on the test database, for setup and assertions that bypass row-level security. */

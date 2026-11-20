@@ -1,0 +1,25 @@
+{
+  "name": "@commucal/auth",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@commucal/db": "workspace:*",
+    "better-auth": "1.7.26",
+    "drizzle-orm": "1.0.0-rc.5",
+    "pg": "8.23.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@better-auth/utils": "0.5.1",
+    "@commucal/config": "workspace:*",
+    "@types/pg": "8.23.1"
+  }
+}

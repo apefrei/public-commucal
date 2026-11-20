@@ -49,6 +49,9 @@ migrations in `packages/db/drizzle` (one folder per migration).
 | `commucal_app` | `web` | read/write tenant tables of the current tenant (RLS), read public views |
 | `commucal_worker` | `worker` | like `commucal_app` |
 | `commucal_mcp` | `mcp` | read the `public_*` views only |
+| `commucal_auth` | Better Auth in `web`, `admin` | users, sessions, credentials, TOTP factors, memberships, invitations; read tenants; append to the audit log ([ADR-0003](adr/0003-authentication-better-auth-mandatory-mfa.md)) |
+
+No other role can read the auth tables, and `commucal_auth` cannot read calendars, events or the audit log.
 
 Demo data (fictional municipality "Musterdorf", idempotent):
 
@@ -59,8 +62,20 @@ docker compose run --rm migrate node src/seed.ts
 Audit entries are written with `recordAudit(tx, { tenantId, action, … })` inside the transaction of the change;
 the database numbers, links and hashes them (append-only, see ADR-0004).
 
-Integration tests (`packages/db`) create a throw-away database per run; they need `TEST_DATABASE_URL`
-(set by the Compose profile `test` and in CI).
+Integration tests (`packages/db`, `packages/auth`) create a throw-away database per run; they need
+`TEST_DATABASE_URL` (set by the Compose profile `test` and in CI).
+
+## Authentication
+
+Better Auth with mandatory TOTP ([ADR-0003](adr/0003-authentication-better-auth-mandatory-mfa.md)), configured in
+`packages/auth`. Every backend page, route handler and server action calls `requireBackendUser()`; only the MFA
+setup flow may accept a session that is not MFA-verified. Tenant permissions: `requireTenantRole()`.
+
+Create the first global admin (the password is prompted without echo); MFA setup follows at the first login:
+
+```bash
+docker compose run --rm admin --email ops@example.ch --name "Ops"
+```
 
 ## Production-like stack (staging)
 
@@ -77,6 +92,7 @@ docker compose up -d --build                  # without Caddy; web and mcp on 12
 | `postgres` | `postgres:18.7-alpine` | volume `pgdata`, network `data` only |
 | `valkey` | `valkey/valkey:9.2.0-alpine` | no persistence, network `data` only |
 | `proxy` | `caddy:2.11.9-alpine` | profile `local`; HTTPS on `PROXY_BIND:PROXY_PORT` |
+| `admin` | target `admin` | profile `tools`; one-off commands such as creating a global admin |
 
 Hardening: app containers run as non-root with a read-only root filesystem, no Linux capabilities and
 `no-new-privileges`. The `data` network is internal: PostgreSQL and Valkey have no route to the outside.

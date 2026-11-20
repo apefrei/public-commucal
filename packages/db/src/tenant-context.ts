@@ -12,6 +12,11 @@ export interface TenantContext {
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** True for a syntactically valid UUID; check ids from requests with it before they reach a uuid column. */
+export function isUuid(value: string): boolean {
+  return UUID_PATTERN.test(value);
+}
+
 /**
  * Runs fn in a transaction whose row-level security context is the given tenant (ADR-0004).
  *
@@ -24,7 +29,7 @@ export async function withTenant<T>(
   context: TenantContext,
   fn: (tx: Transaction) => Promise<T>,
 ): Promise<T> {
-  if (context.tenantId !== null && !UUID_PATTERN.test(context.tenantId)) {
+  if (context.tenantId !== null && !isUuid(context.tenantId)) {
     throw new Error("Invalid tenant id");
   }
   return db.transaction(async (tx) => {

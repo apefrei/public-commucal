@@ -27,9 +27,10 @@ jobs:
       - name: Create .env for the test stack
         run: |
           {
-            for name in POSTGRES_PASSWORD DB_APP_PASSWORD DB_WORKER_PASSWORD DB_MCP_PASSWORD; do
+            for name in POSTGRES_PASSWORD DB_APP_PASSWORD DB_WORKER_PASSWORD DB_MCP_PASSWORD DB_AUTH_PASSWORD; do
               echo "$name=$(openssl rand -hex 24)"
             done
+            echo "BETTER_AUTH_SECRET=$(openssl rand -hex 32)"
             echo "COMMUCAL_HOST=localhost"
           } > .env
       - name: Build all images
@@ -72,14 +73,25 @@ jobs:
           set -eu
           set -a; . ./.env; set +a
           [ "$(docker compose ps -a migrate --format '{{.ExitCode}}')" = "0" ]
-          as_mcp() {
-            docker compose exec -T -e PGPASSWORD="$DB_MCP_PASSWORD" postgres \
-              psql -h 127.0.0.1 -U commucal_mcp -d commucal -tAc "$1"
+          as_role() {
+            docker compose exec -T -e PGPASSWORD="$2" postgres \
+              psql -h 127.0.0.1 -U "$1" -d commucal -tAc "$3"
           }
-          as_mcp "select count(*) from public_calendar"
-          if as_mcp "select count(*) from calendar" 2>/dev/null; then
+          as_role commucal_mcp "$DB_MCP_PASSWORD" "select count(*) from public_calendar"
+          if as_role commucal_mcp "$DB_MCP_PASSWORD" "select count(*) from calendar" 2>/dev/null; then
             echo "commucal_mcp can read a base table" && exit 1
           fi
+          as_role commucal_auth "$DB_AUTH_PASSWORD" "select count(*) from app_user"
+          if as_role commucal_auth "$DB_AUTH_PASSWORD" "select count(*) from event" 2>/dev/null; then
+            echo "commucal_auth can read events" && exit 1
+          fi
+          if as_role commucal_app "$DB_APP_PASSWORD" "select count(*) from auth_account" 2>/dev/null; then
+            echo "commucal_app can read credentials" && exit 1
+          fi
+      - name: Create a global admin with the admin image
+        run: |
+          set -eu
+          openssl rand -hex 16 | docker compose run --rm -T admin --email smoke@example.ch --name Smoke
       - name: Logs on failure
         if: failure()
         run: docker compose --profile local logs --no-color --tail 100

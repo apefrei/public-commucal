@@ -9,7 +9,7 @@ export interface DatabaseHandle {
 }
 
 /**
- * Connects with one of the runtime roles (commucal_app, commucal_worker, commucal_mcp). Tenant data is only
+ * Connects with one of the runtime roles (commucal_app, commucal_worker, commucal_mcp, commucal_auth). Tenant data is only
  * visible inside withTenant(); see tenant-context.ts.
  */
 export function createDatabase(

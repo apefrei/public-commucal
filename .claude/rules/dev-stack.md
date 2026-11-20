@@ -88,6 +88,7 @@ apps/mcp          MCP-Server (ADR-0005)
 apps/worker       Hintergrundjobs (pg-boss)
 packages/core     Fachlogik, von allen Apps genutzt
 packages/db       Drizzle-Schema, Migrationen, Rollen, RLS
+packages/auth     Better Auth, Pflicht-MFA, Tenant-Rollen, Global-Admin-CLI (ADR-0003)
 packages/config   Gemeinsame TypeScript-Konfiguration
 deploy/           Compose, Caddy (Staging), nginx-Snippet (Produktion), Runbooks
 docs/             Anforderungen (requirements.md) und ADRs

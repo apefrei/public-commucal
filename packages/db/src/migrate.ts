@@ -14,6 +14,7 @@ export const RUNTIME_ROLES = [
   ["commucal_app", "DB_APP_PASSWORD"],
   ["commucal_worker", "DB_WORKER_PASSWORD"],
   ["commucal_mcp", "DB_MCP_PASSWORD"],
+  ["commucal_auth", "DB_AUTH_PASSWORD"],
 ] as const;
 
 export async function runMigrations(pool: pg.Pool): Promise<void> {
