@@ -50,6 +50,15 @@ migrations in `packages/db/drizzle` (one folder per migration).
 | `commucal_worker` | `worker` | like `commucal_app` |
 | `commucal_mcp` | `mcp` | read the `public_*` views only |
 
+Demo data (fictional municipality "Musterdorf", idempotent):
+
+```bash
+docker compose run --rm migrate node src/seed.ts
+```
+
+Audit entries are written with `recordAudit(tx, { tenantId, action, … })` inside the transaction of the change;
+the database numbers, links and hashes them (append-only, see ADR-0004).
+
 Integration tests (`packages/db`) create a throw-away database per run; they need `TEST_DATABASE_URL`
 (set by the Compose profile `test` and in CI).
 
