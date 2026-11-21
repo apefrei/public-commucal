@@ -33,6 +33,7 @@ jobs:
             echo "BETTER_AUTH_SECRET=$(openssl rand -hex 32)"
             echo "COMMUCAL_HOST=localhost"
             echo "MAILPIT_URL=http://mailpit:8025"
+            echo "GLOBAL_ADMIN_EMAIL=bootstrap@example.ch"
           } > .env
       - name: Build all images
         run: docker compose --profile local build
@@ -91,6 +92,20 @@ jobs:
           fi
       - name: Check the worker's email transport
         run: docker compose logs worker | grep -q '"emailTransport":"mailpit"'
+      - name: Check the global admin from GLOBAL_ADMIN_EMAIL
+        run: |
+          set -eu
+          [ "$(docker compose ps -a bootstrap --format '{{.ExitCode}}')" = "0" ]
+          docker compose logs bootstrap | grep -q 'global admin created'
+          # bootstrap -> queue -> worker -> Mailpit
+          found=""
+          for _ in $(seq 1 20); do
+            if curl -sf http://127.0.0.1:8025/api/v1/messages | grep -q 'Konto ist eingerichtet'; then found=1; break; fi
+            sleep 1
+          done
+          [ -n "$found" ] || { echo "account setup email did not arrive" && exit 1; }
+          # A second start leaves the account alone.
+          docker compose run --rm --no-deps bootstrap | grep -q 'global admin exists'
       - name: Create a global admin with the admin image
         run: |
           set -eu

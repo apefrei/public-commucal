@@ -28,6 +28,7 @@ describe("email templates", () => {
         role: "contributor",
       },
       { template: "mfa_reset", to: "a@example.ch", url: "https://commucal.ch/anmelden" },
+      { template: "account_setup", to: "a@example.ch", url: "https://commucal.ch/r/3" },
     ];
     for (const job of jobs) {
       const email = renderEmail(job);

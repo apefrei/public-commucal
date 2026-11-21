@@ -37,6 +37,8 @@ export const emailJobSchema = z.discriminatedUnion("template", [
     role: z.enum(["admin", "contributor"]),
   }),
   z.object({ template: z.literal("mfa_reset"), to: z.email(), url: webLink }),
+  // First global admin from GLOBAL_ADMIN_EMAIL: the link sets the initial password (FR-8).
+  z.object({ template: z.literal("account_setup"), to: z.email(), url: webLink }),
 ]);
 
 export type EmailJob = z.infer<typeof emailJobSchema>;

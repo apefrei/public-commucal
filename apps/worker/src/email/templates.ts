@@ -53,6 +53,25 @@ export function renderEmail(job: EmailJob): RenderedEmail {
           FOOTER,
         ].join("\n"),
       };
+    case "account_setup":
+      return {
+        subject: "Ihr CommuCal-Konto ist eingerichtet",
+        text: [
+          "Guten Tag",
+          "",
+          "Für Sie wurde ein CommuCal-Konto mit globalen Administrationsrechten eingerichtet. Legen Sie über",
+          "diesen Link Ihr Passwort fest:",
+          "",
+          job.url,
+          "",
+          "Der Link ist eine Stunde gültig und kann nur einmal verwendet werden. Ist er abgelaufen, fordern Sie",
+          "auf der Anmeldeseite unter «Passwort vergessen» einen neuen an. Bei der ersten Anmeldung richten Sie",
+          "eine Zwei-Faktor-Authentifizierung mit einer Authenticator-App ein; sie ist für alle Konten vorgeschrieben.",
+          "",
+          "Haben Sie dieses Konto nicht erwartet? Dann können Sie diese E-Mail ignorieren.",
+          FOOTER,
+        ].join("\n"),
+      };
     case "mfa_reset":
       return {
         subject: "Ihre Zwei-Faktor-Authentifizierung wurde zurückgesetzt",

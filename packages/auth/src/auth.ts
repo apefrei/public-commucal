@@ -31,7 +31,8 @@ export interface CreateAuthOptions {
   mailer: AuthMailer;
   /**
    * Reject passwords found in Have I Been Pwned (FR-6). Only the first five characters of the password's SHA-1
-   * hash leave the server. Disabled only in tests, which must not depend on an external service.
+   * hash leave the server. Disabled only in tests, which must not depend on an external service, and for the
+   * random, never used password of an account created from GLOBAL_ADMIN_EMAIL.
    */
   checkBreachedPasswords?: boolean;
 }
