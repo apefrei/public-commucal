@@ -5,6 +5,7 @@
 //
 // The password is read from the terminal without echo (or from stdin when piped), never from the command line, so
 // it does not end up in the shell history or the process list. The user must set up MFA at the first login.
+// Without a terminal at hand, set GLOBAL_ADMIN_EMAIL instead (bootstrap-global-admin.ts).
 
 import { parseArgs } from "node:util";
 import { createDatabase, type Database, recordAudit } from "@commucal/db";
@@ -32,6 +33,7 @@ export async function createGlobalAdmin(
   authDb: Database,
   auth: Pick<ReturnType<typeof createAuth>, "api">,
   input: GlobalAdminInput,
+  actorLabel = "cli:create-global-admin",
 ): Promise<string> {
   const { email, name, password } = inputSchema.parse(input);
   const existing = await authDb
@@ -49,7 +51,7 @@ export async function createGlobalAdmin(
       .where(eq(appUser.id, user.id));
     await recordAudit(tx, {
       tenantId: null,
-      actorLabel: "cli:create-global-admin",
+      actorLabel,
       action: "user.global_admin_created",
       entityType: "user",
       entityId: user.id,

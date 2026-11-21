@@ -110,7 +110,8 @@ Milestone in brackets: [M1], [M2], [M3] (see section 9).
   audit log and the affected user is notified by email. After a reset the user must set up MFA again at next login.
 - FR-6 [M1]: Password policy: minimum 12 characters, checked against a breached-password list (no composition rules).
 - FR-7 [M1]: Password reset via email link (single-use, 1 h). A password reset never resets MFA.
-- FR-8 [M1]: The first global admin is created with a CLI command inside the container, not through the web UI.
+- FR-8 [M1]: The first global admin is created with a CLI command inside the container or at start from
+  `GLOBAL_ADMIN_EMAIL` (setup link by email, no password in the environment), not through the web UI.
 - FR-9 [M2]: Tenant admins manage users: invite, change role, remove, resend invitation; list shows role, MFA status, last login.
 
 ### 5.2 Calendars and events

@@ -31,7 +31,9 @@ Rules:
 - Backup codes are generated at setup and stored hashed.
 - Password policy: at least 12 characters plus a breached-password check; no composition rules.
 - Sessions: HttpOnly, Secure, SameSite=Lax cookies; origin checks for state-changing requests.
-- The first global admin is created by a CLI command in the container.
+- The first global admin is created by a CLI command in the container, or at start from `GLOBAL_ADMIN_EMAIL`. The
+  environment never holds a password: the account gets a random password nobody knows and a setup link by email.
+  An existing account is never promoted through the environment.
 
 ### Implementation rules (WP-1.4, Better Auth 1.7.26)
 

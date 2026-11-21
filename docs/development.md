@@ -84,7 +84,13 @@ under `/api/auth` behind CommuCal's rate limits (`apps/web/src/server/rate-limit
 Auth's own per-process limiter is off (its fixed 3 logins per 10 s and IP would block an office behind one IP). The web app must only be reachable through the proxy,
 which sets `X-Real-IP`.
 
-Create the first global admin (the password is prompted without echo); MFA setup follows at the first login:
+Create the first global admin in one of two ways; MFA setup follows at the first login in both:
+
+- Set `GLOBAL_ADMIN_EMAIL` (and optionally `GLOBAL_ADMIN_NAME`) in `.env`. At every start the `bootstrap` service
+  creates the account if it does not exist and emails a link to set the password (valid one hour; afterwards use
+  «Passwort vergessen»). No password is configured. An existing account with that email that is not a global admin
+  is refused, and the stack does not start until the setting is corrected.
+- Or prompt for the password without echo:
 
 ```bash
 docker compose run --rm admin --email ops@example.ch --name "Ops"
@@ -123,6 +129,7 @@ docker compose up -d --build                  # without Caddy; web and mcp on 12
 | `valkey` | `valkey/valkey:9.2.0-alpine` | no persistence, network `data` only |
 | `proxy` | `caddy:2.11.9-alpine` | profile `local`; HTTPS on `PROXY_BIND:PROXY_PORT` |
 | `mailpit` | `axllent/mailpit:v1.34.0` | profile `local`; catches all email (development, staging) |
+| `bootstrap` | target `admin` | runs once after `migrate`: global admin from `GLOBAL_ADMIN_EMAIL`, then exits |
 | `admin` | target `admin` | profile `tools`; one-off commands such as creating a global admin |
 
 Hardening: app containers run as non-root with a read-only root filesystem, no Linux capabilities and
