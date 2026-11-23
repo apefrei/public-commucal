@@ -3,6 +3,7 @@
 #   docker compose --profile local up -d      plus Caddy with HTTPS (staging on cyberfrog, local development)
 #   docker compose --profile test run --rm test
 #   docker compose run --rm admin --email … --name …   create a global admin (profile tools)
+#   GLOBAL_ADMIN_EMAIL in .env                          or: the bootstrap service creates it at start
 # Development with live sync: see compose.dev.yaml and docs/development.md.
 
 name: commucal
@@ -77,6 +78,28 @@ services:
       postgres: { condition: service_healthy }
     restart: "no"
 
+  # Creates the first global admin from GLOBAL_ADMIN_EMAIL if it does not exist, then exits (FR-8). The account gets
+  # a setup link by email; no password is configured. Does nothing without GLOBAL_ADMIN_EMAIL.
+  bootstrap:
+    <<: *hardening
+    restart: "no"
+    build:
+      context: .
+      target: admin
+    image: commucal-admin:local
+    entrypoint: ["node", "src/bootstrap-global-admin.ts"]
+    tmpfs: [/tmp]
+    environment:
+      DATABASE_URL: postgres://commucal_app:${DB_APP_PASSWORD}@postgres:5432/commucal
+      AUTH_DATABASE_URL: postgres://commucal_auth:${DB_AUTH_PASSWORD}@postgres:5432/commucal
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Set BETTER_AUTH_SECRET in .env}
+      BETTER_AUTH_URL: ${PUBLIC_URL:-https://localhost:8443}
+      GLOBAL_ADMIN_EMAIL: ${GLOBAL_ADMIN_EMAIL:-}
+      GLOBAL_ADMIN_NAME: ${GLOBAL_ADMIN_NAME:-}
+    networks: [data]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
   web:
     <<: *hardening
     build:
@@ -95,6 +118,7 @@ services:
     networks: [edge, data]
     depends_on:
       migrate: { condition: service_completed_successfully }
+      bootstrap: { condition: service_completed_successfully }
       valkey: { condition: service_healthy }
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/healthz"]
