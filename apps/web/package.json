@@ -14,7 +14,7 @@
     "@commucal/auth": "workspace:*",
     "@commucal/core": "workspace:*",
     "@commucal/db": "workspace:*",
-    "better-auth": "1.7.26",
+    "better-auth": "1.7.27",
     "iovalkey": "0.4.0",
     "next": "16.4.6",
     "pino": "10.4.0",
